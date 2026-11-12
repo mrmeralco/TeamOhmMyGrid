@@ -12,23 +12,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BillVerificationDrawer } from '../../components/BillVerificationDrawer';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { parseMeralcoBillImage } from '../../lib/geminiService';
 import { ExtractedBillData } from '../../types';
+import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_BILL_BREAKDOWN, MOCK_USER } from '../../constants/mockData';
 
 export default function BillScreen() {
   const { theme, fontScale } = useTheme();
+  const { user } = useAuth();
   const { activeBill, setActiveBill, addChatMessage, activeCanProfile } = useEnergy();
 
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [pendingBillData, setPendingBillData] = useState<ExtractedBillData | null>(null);
 
-  const loggedInCan = activeBill?.customerAccountNumber || activeCanProfile?.accountNumber || MOCK_USER.accountNumber;
+  const loggedInCan =
+    activeCanProfile?.accountNumber ||
+    (user?.can ? formatCANDisplay(user.can) : null) ||
+    activeBill?.customerAccountNumber ||
+    MOCK_USER.accountNumber;
 
   const bill = activeBill || {
     customerAccountNumber: loggedInCan,

@@ -13,16 +13,21 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { TEAM_INFO, MOCK_USER } from '../../constants/mockData';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
+import { formatCANDisplay } from '../../utils/validation';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { theme, fontScale } = useTheme();
+  const { user, logout } = useAuth();
   const {
     budget,
     setBudget,
@@ -32,12 +37,20 @@ export default function ProfileScreen() {
     activeCanProfile,
     switchCanProfile,
     renameCanProfile,
+    addCanProfile,
+    deleteCanProfile,
   } = useEnergy();
 
   const [customBudget, setCustomBudget] = useState(budget.toString());
   const [canDropdownOpen, setCanDropdownOpen] = useState(false);
   const [editingCanId, setEditingCanId] = useState<string | null>(null);
   const [editingNameText, setEditingNameText] = useState('');
+
+  const [isAddingCan, setIsAddingCan] = useState(false);
+  const [newCanName, setNewCanName] = useState('');
+  const [newCanNumber, setNewCanNumber] = useState('');
+  const [newCanAddress, setNewCanAddress] = useState('');
+  const [addCanError, setAddCanError] = useState('');
 
   useEffect(() => {
     setCustomBudget(budget.toString());
@@ -89,25 +102,85 @@ export default function ProfileScreen() {
     setEditingNameText('');
   };
 
+  const handleSaveNewCan = () => {
+    const clean = newCanNumber.replace(/\D/g, '');
+    if (clean.length !== 10) {
+      setAddCanError('Ang CAN ay dapat eksaktong 10 numero.');
+      return;
+    }
+    triggerHaptic();
+    addCanProfile(
+      newCanName.trim() || `CAN ${clean.slice(-4)}`,
+      clean,
+      newCanAddress.trim() || undefined
+    );
+    setIsAddingCan(false);
+    setNewCanName('');
+    setNewCanNumber('');
+    setNewCanAddress('');
+    setAddCanError('');
+  };
+
+  const handleDeleteCan = (id: string, name: string) => {
+    triggerHaptic();
+    Alert.alert(
+      'Alisin ang CAN Profile',
+      `Sigurado ka bang nais mong alisin ang profile na "${name}"?`,
+      [
+        { text: 'Kanselahin', style: 'cancel' },
+        {
+          text: 'Alisin',
+          style: 'destructive',
+          onPress: () => deleteCanProfile(id),
+        },
+      ]
+    );
+  };
+
+  const handleLogout = () => {
+    const perform = async () => {
+      triggerHaptic();
+      await logout();
+      router.replace('/login');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Sigurado ka bang nais mong mag-log out sa KuryenTipid?')) {
+        perform();
+      }
+    } else {
+      Alert.alert('Mag-log out', 'Sigurado ka bang nais mong mag-log out sa KuryenTipid?', [
+        { text: 'Kanselahin', style: 'cancel' },
+        { text: 'Mag-log out', style: 'destructive', onPress: perform },
+      ]);
+    }
+  };
+
   const currentCan = activeCanProfile || {
-    id: 'can-1',
-    name: 'Bahay (Pasig)',
-    accountNumber: activeBill?.customerAccountNumber || MOCK_USER.accountNumber,
-    customerName: MOCK_USER.name,
-    serviceAddress: MOCK_USER.serviceAddress,
-    ratePerKwh: MOCK_USER.ratePerKwh,
+    id: `can-${user?.can || 'primary'}`,
+    name: 'Bahay',
+    accountNumber:
+      (user?.can ? formatCANDisplay(user.can) : null) ||
+      activeBill?.customerAccountNumber ||
+      MOCK_USER.accountNumber,
+    customerName: user?.fullName || MOCK_USER.name,
+    serviceAddress: user?.serviceAddress || MOCK_USER.serviceAddress,
+    ratePerKwh: 11.43,
     budget,
     currentKwh: 188,
   };
 
+  const displayName = user?.fullName || currentCan.customerName || 'Customer';
+
   // Extract avatar initials
-  const initials = currentCan.name
-    .split(' ')
-    .filter(Boolean)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase() || 'CAN';
+  const initials =
+    displayName
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'U';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
@@ -140,11 +213,11 @@ export default function ProfileScreen() {
           <View style={styles.accountDetails}>
             <View style={styles.profileNameRow}>
               <Text style={[styles.accountName, { color: theme.ink, fontSize: 17 * fontScale }]}>
-                {currentCan.name}
+                {displayName}
               </Text>
               <View style={[styles.activeCanBadge, { backgroundColor: theme.okBg, borderColor: theme.ok }]}>
                 <Text style={[styles.activeCanBadgeText, { color: theme.ok, fontSize: 10 * fontScale }]}>
-                  Aktibo
+                  {currentCan.name}
                 </Text>
               </View>
             </View>
@@ -155,6 +228,11 @@ export default function ProfileScreen() {
             <Text style={[styles.serviceAddress, { color: theme.muted, fontSize: 11 * fontScale }]}>
               {currentCan.serviceAddress}
             </Text>
+            {user?.email ? (
+              <Text style={[styles.serviceAddress, { color: theme.muted, fontSize: 10 * fontScale, marginTop: 1 }]}>
+                {user.email}
+              </Text>
+            ) : null}
           </View>
 
           {/* Dropdown Selector on the Right Side of Profile Card with Small Arrow */}
@@ -261,6 +339,24 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Logout Action */}
+        <TouchableOpacity
+          style={[styles.logoutBtn, { borderColor: '#fca5a5', backgroundColor: '#fef2f2' }]}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Mag-log out sa KuryenTipid"
+        >
+          <Text style={[styles.logoutBtnText, { fontSize: 14 * fontScale }]}>
+            🚪 Mag-log out sa Account
+          </Text>
+          {user ? (
+            <Text style={[styles.logoutSubText, { fontSize: 11 * fontScale }]}>
+              Naka-login bilang {user.fullName || user.username}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
+
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -357,7 +453,7 @@ export default function ProfileScreen() {
                 </View>
               ) : null}
 
-              {/* List of 3 Preset CAN Profiles */}
+              {/* List of CAN Profiles */}
               <View style={styles.canList}>
                 {canProfiles.map((p) => {
                   const isActive = p.id === activeCanId;
@@ -396,23 +492,116 @@ export default function ProfileScreen() {
                         </Text>
                       </View>
 
-                      {/* Edit Name Button */}
-                      <TouchableOpacity
-                        style={[styles.renameTriggerBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          handleStartRename(p.id, p.name);
-                        }}
-                        accessibilityLabel={`Palitan ang pangalan ng ${p.name}`}
-                      >
-                        <Text style={[styles.renameTriggerText, { color: theme.ink, fontSize: 11 * fontScale }]}>
-                          ✏️ Edit
-                        </Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {/* Edit Name Button */}
+                        <TouchableOpacity
+                          style={[styles.renameTriggerBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            handleStartRename(p.id, p.name);
+                          }}
+                          accessibilityLabel={`Palitan ang pangalan ng ${p.name}`}
+                        >
+                          <Text style={[styles.renameTriggerText, { color: theme.ink, fontSize: 11 * fontScale }]}>
+                            ✏️ Edit
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Delete secondary CAN button */}
+                        {!isActive && canProfiles.length > 1 ? (
+                          <TouchableOpacity
+                            style={[styles.deleteCanBtn, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              handleDeleteCan(p.id, p.name);
+                            }}
+                            accessibilityLabel={`Alisin ang CAN ${p.name}`}
+                          >
+                            <Text style={[styles.deleteCanText, { fontSize: 11 * fontScale }]}>
+                              🗑️
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              {/* Add New CAN Profile Section */}
+              {!isAddingCan ? (
+                <TouchableOpacity
+                  style={[styles.addCanBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
+                  onPress={() => {
+                    triggerHaptic();
+                    setIsAddingCan(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Magdagdag ng Bagong CAN"
+                >
+                  <Text style={[styles.addCanBtnText, { color: theme.brand, fontSize: 13 * fontScale }]}>
+                    ➕ Magdagdag ng Bagong CAN
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.addCanBox, { backgroundColor: theme.cont, borderColor: theme.brand }]}>
+                  <Text style={[styles.addCanTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
+                    Magdagdag ng Bagong Meralco CAN
+                  </Text>
+                  <TextInput
+                    style={[styles.addCanInput, { backgroundColor: theme.bg, borderColor: theme.line, color: theme.ink }]}
+                    value={newCanName}
+                    onChangeText={setNewCanName}
+                    placeholder="Pangalan (Hal. Bahay, Tindahan, Condo)"
+                    placeholderTextColor={theme.muted}
+                  />
+                  <TextInput
+                    style={[styles.addCanInput, { backgroundColor: theme.bg, borderColor: theme.line, color: theme.ink, marginTop: 6 }]}
+                    value={newCanNumber}
+                    onChangeText={(t) => {
+                      setNewCanNumber(t);
+                      setAddCanError('');
+                    }}
+                    keyboardType="numeric"
+                    maxLength={12}
+                    placeholder="10-digit CAN (Hal. 1234-5678-90)"
+                    placeholderTextColor={theme.muted}
+                  />
+                  <TextInput
+                    style={[styles.addCanInput, { backgroundColor: theme.bg, borderColor: theme.line, color: theme.ink, marginTop: 6 }]}
+                    value={newCanAddress}
+                    onChangeText={setNewCanAddress}
+                    placeholder="Address (Optional)"
+                    placeholderTextColor={theme.muted}
+                  />
+                  {addCanError ? (
+                    <Text style={{ color: '#ef4444', fontSize: 11 * fontScale, marginTop: 4 }}>
+                      {addCanError}
+                    </Text>
+                  ) : null}
+                  <View style={styles.addCanActionsRow}>
+                    <TouchableOpacity
+                      style={[styles.addCanSaveBtn, { backgroundColor: theme.brand }]}
+                      onPress={handleSaveNewCan}
+                    >
+                      <Text style={[styles.addCanSaveText, { color: theme.brandInk, fontSize: 12 * fontScale }]}>
+                        I-save
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.addCanCancelBtn, { backgroundColor: theme.bg, borderColor: theme.line }]}
+                      onPress={() => {
+                        setIsAddingCan(false);
+                        setAddCanError('');
+                      }}
+                    >
+                      <Text style={[styles.addCanCancelText, { color: theme.muted, fontSize: 12 * fontScale }]}>
+                        Kanselahin
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </Pressable>
           </KeyboardAvoidingView>
         </TouchableOpacity>
@@ -593,6 +782,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   renameCancelText: { fontWeight: '600' },
+  logoutBtn: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
+    gap: 4,
+  },
+  logoutBtnText: {
+    color: '#b91c1c',
+    fontWeight: '800',
+  },
+  logoutSubText: {
+    color: '#991b1b',
+    fontWeight: '500',
+  },
   canList: { gap: 8 },
   canItemCard: {
     flexDirection: 'row',
@@ -626,4 +833,59 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   renameTriggerText: { fontWeight: '600' },
+  deleteCanBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteCanText: { fontWeight: '600' },
+  addCanBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    marginTop: 12,
+  },
+  addCanBtnText: { fontWeight: '700' },
+  addCanBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  addCanTitle: { fontWeight: '800', marginBottom: 8 },
+  addCanInput: {
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    fontSize: 13,
+  },
+  addCanActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  addCanSaveBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addCanSaveText: { fontWeight: '700' },
+  addCanCancelBtn: {
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addCanCancelText: { fontWeight: '600' },
 });

@@ -9,16 +9,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BudgetGauge } from '../../components/BudgetGauge';
+import { UsageAnalysisCard } from '../../components/UsageAnalysisCard';
 import { TipiMascot } from '../../components/TipiMascot';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { calculateTierCliff } from '../../lib/tariffEngine';
+import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_USER } from '../../constants/mockData';
 
 export default function HomeScreen() {
   const { theme, fontScale } = useTheme();
+  const { user } = useAuth();
   const {
     budget,
     projected,
@@ -28,9 +32,13 @@ export default function HomeScreen() {
   } = useEnergy();
 
   const cliff = calculateTierCliff(currentKwh);
-  const canNumber = activeBill?.customerAccountNumber || activeCanProfile?.accountNumber || MOCK_USER.accountNumber;
-  const userName = activeCanProfile?.customerName || MOCK_USER.name;
-  const profileName = activeCanProfile?.name || 'Bahay (Pasig)';
+  const userName = user?.fullName || activeCanProfile?.customerName || MOCK_USER.name;
+  const canNumber =
+    activeCanProfile?.accountNumber ||
+    (user?.can ? formatCANDisplay(user.can) : null) ||
+    activeBill?.customerAccountNumber ||
+    MOCK_USER.accountNumber;
+  const profileName = activeCanProfile?.name || 'Bahay';
   const ratePerKwh = activeCanProfile?.ratePerKwh || MOCK_USER.ratePerKwh;
 
   return (
@@ -58,6 +66,9 @@ export default function HomeScreen() {
 
         {/* Budget Circular Gauge Card */}
         <BudgetGauge projected={projected} budget={budget} />
+
+        {/* Tipi Gemini AI Usage & Budget Analysis Card */}
+        <UsageAnalysisCard />
 
         {/* Live Grid Metrics Row */}
         <View style={styles.metricsRow}>

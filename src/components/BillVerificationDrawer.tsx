@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { ExtractedBillData } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { formatCANDisplay } from '../utils/validation';
 import { MOCK_USER } from '../constants/mockData';
 
 interface BillVerificationDrawerProps {
@@ -28,6 +30,7 @@ export const BillVerificationDrawer: React.FC<BillVerificationDrawerProps> = ({
   onCancel,
 }) => {
   const { theme, fontScale } = useTheme();
+  const { user } = useAuth();
 
   const [can, setCan] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -38,7 +41,10 @@ export const BillVerificationDrawer: React.FC<BillVerificationDrawerProps> = ({
   const [generationCharge, setGenerationCharge] = useState('');
 
   useEffect(() => {
-    const loggedInCan = data?.customerAccountNumber || MOCK_USER.accountNumber;
+    const loggedInCan =
+      data?.customerAccountNumber ||
+      (user?.can ? formatCANDisplay(user.can) : null) ||
+      MOCK_USER.accountNumber;
     setCan(loggedInCan);
     if (data) {
       setStartDate(data.billingPeriod?.startDate || '2026-04-15');

@@ -390,7 +390,4 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 10,
   },
-  recordingTimerText: {
-    fontWeight: '900',
-  },
 });
