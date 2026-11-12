@@ -289,7 +289,8 @@ export async function processVoiceQuery(
   base64Audio: string,
   context: TipiQueryContext,
   history: ConversationTurn[] = [],
-  spokenTranscript?: string
+  spokenTranscript?: string,
+  mimeType?: string
 ): Promise<string> {
   const systemInstruction = `You are "Tipi", a friendly bilingual conversational energy coach for Meralco customers in the Philippines.
 Recognize and understand the user's voice query whether spoken in Filipino (Tagalog), English, or Taglish.
@@ -306,7 +307,13 @@ Context: Profile ${context.profileName || 'Bahay'} (${context.meterType || 'AMI'
   }
   userParts.push({
     inline_data: {
-      mime_type: 'audio/mp4',
+      // On web (Expo Web / browser) MediaRecorder produces webm; on native it produces mp4/m4a.
+      // Use the passed mimeType if provided; otherwise detect from environment.
+      mime_type:
+        mimeType ||
+        (typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined'
+          ? 'audio/webm'
+          : 'audio/mp4'),
       data: base64Audio,
     },
   });

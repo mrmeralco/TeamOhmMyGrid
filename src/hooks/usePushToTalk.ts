@@ -2,30 +2,41 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync } from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
 
+/**
+ * usePushToTalk — True walkie-talkie hold-to-record / release-to-send hook.
+ *
+ * Usage:
+ *   const { isRecording, startRecording, stopRecording, recognitionLang, setRecognitionLang } = usePushToTalk();
+ *
+ *   onPressIn  → await startRecording(onLiveTranscript?)  // just starts; returns immediately
+ *   onPressOut → const { base64, transcript } = await stopRecording()  // stops and returns data
+ *
+ * No auto-stop timer. Recording continues exactly as long as the user holds the button.
+ */
 export function usePushToTalk() {
   const [isRecording, setIsRecording] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(5);
   const [recognitionLang, setRecognitionLang] = useState<'fil-PH' | 'en-PH'>('en-PH');
-  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const onDoneCallbackRef = useRef<((base64: string | null, transcript?: string) => void) | null>(
-    null
-  );
+
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>('');
+  // Track whether the audio recorder hardware is active (may fail on web)
+  const recorderActiveRef = useRef<boolean>(false);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
+  // ── Stop speech recognition (web SpeechRecognition API) ──
   const stopSpeechRecognition = useCallback(() => {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch {
-        // Ignore stop errors if already stopped
+        // Already stopped or not started — ignore
       }
       recognitionRef.current = null;
     }
   }, []);
 
+  // ── Start speech recognition for live transcript while holding ──
   const startSpeechRecognition = useCallback(
     (onTranscript?: (text: string) => void) => {
       transcriptRef.current = '';
@@ -36,7 +47,7 @@ export function usePushToTalk() {
 
       try {
         const recognition = new SpeechRecognitionCtor();
-        // en-PH and fil-PH on Chromium/WebKit recognize both Filipino (Tagalog), English, and Taglish
+        // fil-PH and en-PH on Chromium/WebKit recognizes both Filipino (Tagalog), English, and Taglish
         recognition.lang = recognitionLang;
         recognition.continuous = true;
         recognition.interimResults = true;
@@ -57,6 +68,10 @@ export function usePushToTalk() {
           }
         };
 
+        recognition.onerror = () => {
+          // Silently ignore recognition errors (e.g. no-speech, network)
+        };
+
         recognition.start();
         recognitionRef.current = recognition;
       } catch {
@@ -66,101 +81,82 @@ export function usePushToTalk() {
     [recognitionLang]
   );
 
-  const stopRecordingInternal = useCallback(async (): Promise<string | null> => {
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-    stopSpeechRecognition();
-    setIsRecording(false);
-    setSecondsLeft(5);
-
-    try {
-      await recorder.stop();
-      const uri = recorder.uri;
-      if (!uri) return null;
-
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      return base64;
-    } catch {
-      return null;
-    }
-  }, [recorder, stopSpeechRecognition]);
-
+  // ── startRecording: begin recording; returns immediately (no auto-stop) ──
   const startRecording = useCallback(
-    async (
-      onComplete?: (base64: string | null, transcript?: string) => void,
-      onTranscript?: (text: string) => void
-    ): Promise<string | null> => {
-      onDoneCallbackRef.current = onComplete || null;
+    async (onTranscript?: (text: string) => void): Promise<void> => {
+      transcriptRef.current = '';
+      recorderActiveRef.current = false;
+
+      // Start live speech recognition in parallel
       startSpeechRecognition(onTranscript);
 
       try {
         const { granted } = await requestRecordingPermissionsAsync();
-        if (!granted && !recognitionRef.current) {
-          stopSpeechRecognition();
-          return null;
-        }
-
         if (granted) {
           try {
             await recorder.prepareToRecordAsync();
             recorder.record();
+            recorderActiveRef.current = true;
           } catch {
-            // Continue with Web Speech recognition if audio recorder hardware is busy
+            // Audio hardware unavailable (e.g., web without mic permission) —
+            // fall through to speech-recognition-only mode.
+            recorderActiveRef.current = false;
           }
         }
-
         setIsRecording(true);
-        setSecondsLeft(5);
-
-        let counter = 5;
-        countdownTimerRef.current = setInterval(async () => {
-          counter -= 1;
-          setSecondsLeft(counter);
-          if (counter <= 0) {
-            if (countdownTimerRef.current) {
-              clearInterval(countdownTimerRef.current);
-              countdownTimerRef.current = null;
-            }
-            const finalTranscript = transcriptRef.current;
-            const b64 = await stopRecordingInternal();
-            if (onDoneCallbackRef.current) {
-              onDoneCallbackRef.current(b64, finalTranscript);
-              onDoneCallbackRef.current = null;
-            }
-          }
-        }, 1000);
-
-        return null;
       } catch {
         stopSpeechRecognition();
         setIsRecording(false);
-        setSecondsLeft(5);
-        return null;
       }
     },
-    [recorder, startSpeechRecognition, stopRecordingInternal, stopSpeechRecognition]
+    [recorder, startSpeechRecognition, stopSpeechRecognition]
   );
 
+  // ── stopRecording: stop recording and return captured audio + transcript ──
+  const stopRecording = useCallback(async (): Promise<{
+    base64: string | null;
+    transcript: string;
+  }> => {
+    const finalTranscript = transcriptRef.current;
+    stopSpeechRecognition();
+    setIsRecording(false);
+
+    let base64: string | null = null;
+
+    if (recorderActiveRef.current) {
+      try {
+        await recorder.stop();
+        const uri = recorder.uri;
+        if (uri) {
+          base64 = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        }
+      } catch {
+        base64 = null;
+      }
+      recorderActiveRef.current = false;
+    }
+
+    return { base64, transcript: finalTranscript };
+  }, [recorder, stopSpeechRecognition]);
+
+  // Expose the latest live transcript for callers that want it synchronously
+  const getLatestTranscript = useCallback(() => transcriptRef.current, []);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (countdownTimerRef.current) {
-        clearInterval(countdownTimerRef.current);
-      }
       stopSpeechRecognition();
     };
   }, [stopSpeechRecognition]);
 
   return {
     isRecording,
-    secondsLeft,
     recognitionLang,
     setRecognitionLang,
-     getLatestTranscript: () => transcriptRef.current,
+    getLatestTranscript,
     startRecording,
-    stopRecording: stopRecordingInternal,
+    stopRecording,
   };
 }
