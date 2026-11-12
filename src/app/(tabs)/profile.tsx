@@ -27,7 +27,8 @@ import { formatCANDisplay } from '../../utils/validation';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
   const { user, logout } = useAuth();
   const {
     budget,
@@ -188,8 +189,8 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale }]}>
-            Profile at Setting
+          <Text style={[styles.title, { color: theme.ink, fontSize: 28 * fontScale, fontFamily: 'Coolvetica', letterSpacing: 0.8 }]}>
+            {isEnglish ? 'Profile & ' : 'Profile at '}<Text style={{ color: '#FF6B00' }}>{isEnglish ? 'Settings' : 'Setting'}</Text>
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <HeaderAlertButton from="profile" />
@@ -203,7 +204,7 @@ export default function ProfileScreen() {
           onPress={() => setCanDropdownOpen(true)}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={`CAN Profile: ${currentCan.name}, ${currentCan.accountNumber}. Pindutin para palitan.`}
+          accessibilityLabel={`CAN Profile: ${currentCan.name}, ${currentCan.accountNumber}. ${isEnglish ? 'Tap to switch.' : 'Pindutin para palitan.'}`}
         >
           <View style={[styles.avatarCircle, { backgroundColor: theme.brand }]}>
             <Text style={[styles.avatarText, { color: theme.brandInk, fontSize: 16 * fontScale }]}>
@@ -241,7 +242,7 @@ export default function ProfileScreen() {
             style={[styles.dropdownTriggerBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
           >
             <Text style={[styles.dropdownTriggerText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-              Palitan
+              {isEnglish ? 'Switch' : 'Palitan'}
             </Text>
             <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 3 }}>
               <Path
@@ -258,10 +259,12 @@ export default function ProfileScreen() {
         {/* Monthly Budget Setting */}
         <View style={[styles.settingSection, { backgroundColor: theme.surface, borderColor: theme.line }]}>
           <Text style={[styles.sectionTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-            Buwanang Budget ({currentCan.name})
+            {isEnglish ? `Monthly Budget (${currentCan.name})` : `Buwanang Budget (${currentCan.name})`}
           </Text>
           <Text style={[styles.sectionSubtitle, { color: theme.muted, fontSize: 12 * fontScale }]}>
-            Itakda ang ceiling para sa alert notifications kapag malapit nang lumagpas.
+            {isEnglish
+              ? 'Set your monthly ceiling to receive alerts when nearing your budget.'
+              : 'Itakda ang ceiling para sa alert notifications kapag malapit nang lumagpas.'}
           </Text>
 
           <View style={styles.budgetControlRow}>
@@ -269,7 +272,7 @@ export default function ProfileScreen() {
               style={[styles.stepperBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
               onPress={() => handleUpdateBudget(-250)}
               accessibilityRole="button"
-              accessibilityLabel="Bawasan ng 250 pesos ang budget"
+              accessibilityLabel={isEnglish ? 'Decrease budget by 250 pesos' : 'Bawasan ng 250 pesos ang budget'}
             >
               <Text style={[styles.stepperText, { color: theme.ink, fontSize: 15 * fontScale }]}>
                 - ₱250
@@ -286,7 +289,7 @@ export default function ProfileScreen() {
               style={[styles.stepperBtn, { backgroundColor: theme.brand, borderColor: theme.brand }]}
               onPress={() => handleUpdateBudget(250)}
               accessibilityRole="button"
-              accessibilityLabel="Dagdagan ng 250 pesos ang budget"
+              accessibilityLabel={isEnglish ? 'Increase budget by 250 pesos' : 'Dagdagan ng 250 pesos ang budget'}
             >
               <Text style={[styles.stepperText, { color: theme.brandInk, fontSize: 15 * fontScale }]}>
                 + ₱250
@@ -308,7 +311,7 @@ export default function ProfileScreen() {
               value={customBudget}
               onChangeText={setCustomBudget}
               keyboardType="numeric"
-              placeholder="I-type ang budget"
+              placeholder={isEnglish ? 'Enter budget' : 'I-type ang budget'}
               placeholderTextColor={theme.muted}
             />
             <TouchableOpacity
@@ -316,7 +319,7 @@ export default function ProfileScreen() {
               onPress={handleSaveInputBudget}
             >
               <Text style={[styles.saveBudgetText, { color: theme.surface, fontSize: 13 * fontScale }]}>
-                I-save
+                {isEnglish ? 'Save' : 'I-save'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -346,14 +349,14 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel="Mag-log out sa KuryenTipid"
+          accessibilityLabel={isEnglish ? 'Log out of KuryenTipid' : 'Mag-log out sa KuryenTipid'}
         >
           <Text style={[styles.logoutBtnText, { fontSize: 14 * fontScale }]}>
-            🚪 Mag-log out sa Account
+            {isEnglish ? 'Log Out of Account' : 'Mag-log out sa Account'}
           </Text>
           {user ? (
             <Text style={[styles.logoutSubText, { fontSize: 11 * fontScale }]}>
-              Naka-login bilang {user.fullName || user.username}
+              {isEnglish ? `Signed in as ${user.fullName || user.username}` : `Naka-login bilang ${user.fullName || user.username}`}
             </Text>
           ) : null}
         </TouchableOpacity>
@@ -392,7 +395,7 @@ export default function ProfileScreen() {
               <View style={[styles.modalHeaderRow, { borderBottomColor: theme.line }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.modalTitle, { color: theme.ink, fontSize: 17 * fontScale }]}>
-                    🏢 Mga CAN Profile
+                    Mga CAN Profile
                   </Text>
                   <Text style={[styles.modalSubtitle, { color: theme.muted, fontSize: 11 * fontScale }]}>
                     Pumili ng active account o palitan ang pangalan nito.
@@ -479,7 +482,7 @@ export default function ProfileScreen() {
                           {isActive ? (
                             <View style={[styles.activeTag, { backgroundColor: theme.brand }]}>
                               <Text style={[styles.activeTagText, { color: theme.brandInk, fontSize: 10 * fontScale }]}>
-                                ✓ Aktibo
+                                Aktibo
                               </Text>
                             </View>
                           ) : null}
@@ -492,6 +495,7 @@ export default function ProfileScreen() {
                           <MeterClassificationBadge
                             meterType={p.meterType || 'AMI'}
                             size="compact"
+                            showIcon={false}
                             showSubtitle={false}
                           />
                         </View>
@@ -511,7 +515,7 @@ export default function ProfileScreen() {
                           accessibilityLabel={`Palitan ang pangalan ng ${p.name}`}
                         >
                           <Text style={[styles.renameTriggerText, { color: theme.ink, fontSize: 11 * fontScale }]}>
-                            ✏️ Edit
+                            Edit
                           </Text>
                         </TouchableOpacity>
 
@@ -526,7 +530,7 @@ export default function ProfileScreen() {
                             accessibilityLabel={`Alisin ang CAN ${p.name}`}
                           >
                             <Text style={[styles.deleteCanText, { fontSize: 11 * fontScale }]}>
-                              🗑️
+                              Alisin
                             </Text>
                           </TouchableOpacity>
                         ) : null}
@@ -548,7 +552,7 @@ export default function ProfileScreen() {
                   accessibilityLabel="Magdagdag ng Bagong CAN"
                 >
                   <Text style={[styles.addCanBtnText, { color: theme.brand, fontSize: 13 * fontScale }]}>
-                    ➕ Magdagdag ng Bagong CAN
+                    + Magdagdag ng Bagong CAN
                   </Text>
                 </TouchableOpacity>
               ) : (

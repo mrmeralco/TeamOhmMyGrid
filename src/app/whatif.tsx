@@ -13,10 +13,12 @@ import { router } from 'expo-router';
 import { useTheme } from '../context/ThemeContext';
 import { useEnergy } from '../context/EnergyContext';
 import { calculateWhatIfSavings } from '../lib/tariffEngine';
+import { buildWhatIfExplanationPrompt } from '../lib/geminiService';
 
 export default function WhatIfModal() {
-  const { theme, fontScale } = useTheme();
-  const { currentKwh, budget } = useEnergy();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
+  const { currentKwh, askTipi } = useEnergy();
 
   const [baseTemp] = useState(20);
   const [targetTemp, setTargetTemp] = useState(24);
@@ -62,16 +64,17 @@ export default function WhatIfModal() {
   };
 
   const handleApplyToAgent = () => {
-    Alert.alert(
-      '🤖 Na-apply ang Settings',
-      `In-apply na ni Tipi ang iyong settings:\n• Aircon: ${targetTemp}°C (${targetHours}h/araw)\n• Standby Cutoff: ${unplugVampire ? 'On' : 'Off'}\n• Peak Shift: ${shiftPeakHours ? 'On' : 'Off'}\n\nTinatayang Tipid: ₱${totalPesosSaved.toFixed(2)} / buwan.`,
-      [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]
-    );
+    const prompt = buildWhatIfExplanationPrompt({
+      targetTemp,
+      targetHours,
+      unplugVampire,
+      shiftPeakHours,
+      fridgeEcoMode,
+      totalPesosSaved,
+      totalKwhSaved,
+      language,
+    });
+    askTipi(prompt);
   };
 
   return (
@@ -79,8 +82,8 @@ export default function WhatIfModal() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header with Close Button */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.ink, fontSize: 22 * fontScale }]}>
-            Watt-Calculator 💡
+          <Text style={[styles.title, { color: theme.ink, fontSize: 22 * fontScale, fontFamily: 'Coolvetica' }]}>
+            Watt-<Text style={{ color: '#FF6B00' }}>Calculator</Text>
           </Text>
           <TouchableOpacity
             style={[styles.closeBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
@@ -97,26 +100,34 @@ export default function WhatIfModal() {
         {/* Savings Big Result Card */}
         <View style={[styles.resultCard, { backgroundColor: theme.surface, borderColor: theme.line }]}>
           <Text style={[styles.resultLabel, { color: theme.muted, fontSize: 12 * fontScale }]}>
-            TINATAYANG MATITIPID BAWAT BUWAN
+            {isEnglish ? 'ESTIMATED MONTHLY SAVINGS' : 'TINATAYANG MATITIPID BAWAT BUWAN'}
           </Text>
           <Text style={[styles.savingsAmount, { color: theme.ok, fontSize: 36 * fontScale }]}>
             ₱{totalPesosSaved.toFixed(2)}
           </Text>
           <Text style={[styles.savingsKwh, { color: theme.ink, fontSize: 14 * fontScale }]}>
-            Bawas <Text style={{ fontWeight: '800' }}>{totalKwhSaved} kWh</Text> sa konsumo
+            {isEnglish ? (
+              <>
+                Saves <Text style={{ fontWeight: '800' }}>{totalKwhSaved} kWh</Text> in consumption
+              </>
+            ) : (
+              <>
+                Bawas <Text style={{ fontWeight: '800' }}>{totalKwhSaved} kWh</Text> sa konsumo
+              </>
+            )}
           </Text>
 
           {simulation.achievedTierDrop && (
             <View style={[styles.tierDropPill, { backgroundColor: theme.okBg }]}>
               <Text style={[styles.tierDropText, { color: theme.ok, fontSize: 12 * fontScale }]}>
-                🎉 Bababa sa mas murang distribution tier!
+                {isEnglish ? 'Drops into a lower distribution tier!' : 'Bababa sa mas murang distribution tier!'}
               </Text>
             </View>
           )}
 
           <View style={[styles.formulaBox, { backgroundColor: theme.cont }]}>
             <Text style={[styles.formulaText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-              Formula: {targetTemp}°C ({targetHours}h/araw) + {unplugVampire ? 'standby ' : ''}{shiftPeakHours ? 'off-peak ' : ''}{fridgeEcoMode ? 'fridge ' : ''}savings
+              Formula: {targetTemp}°C ({targetHours}h/{isEnglish ? 'day' : 'araw'}) + {unplugVampire ? 'standby ' : ''}{shiftPeakHours ? 'off-peak ' : ''}{fridgeEcoMode ? 'fridge ' : ''}savings
             </Text>
           </View>
         </View>
@@ -157,7 +168,7 @@ export default function WhatIfModal() {
           {/* Hours */}
           <View style={styles.controlRow}>
             <Text style={[styles.controlName, { color: theme.ink, fontSize: 14 * fontScale }]}>
-              Oras bawat araw:
+              {isEnglish ? 'Hours per day:' : 'Oras bawat araw:'}
             </Text>
 
             <View style={styles.stepperGroup}>
@@ -185,16 +196,16 @@ export default function WhatIfModal() {
         {/* Behavioral Household Levers */}
         <View style={[styles.controlsCard, { backgroundColor: theme.surface, borderColor: theme.line }]}>
           <Text style={[styles.cardSectionTitle, { color: theme.ink, fontSize: 15 * fontScale }]}>
-            Iba pang Paraan ng Pagtitipid
+            {isEnglish ? 'Other Ways to Save' : 'Iba pang Paraan ng Pagtitipid'}
           </Text>
 
           <View style={styles.switchRow}>
             <View style={styles.switchLabelCol}>
               <Text style={[styles.switchTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                🔌 Tanggalin ang Standby Loads
+                {isEnglish ? 'Eliminate Standby Loads' : 'Tanggalin ang Standby Loads'}
               </Text>
               <Text style={[styles.switchSub, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                I-unplug sa gabi (+₱95/mo)
+                {isEnglish ? 'Unplug at night (+₱95/mo)' : 'I-unplug sa gabi (+₱95/mo)'}
               </Text>
             </View>
             <Switch
@@ -208,10 +219,10 @@ export default function WhatIfModal() {
           <View style={styles.switchRow}>
             <View style={styles.switchLabelCol}>
               <Text style={[styles.switchTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                ⚡ I-shift sa Off-Peak
+                {isEnglish ? 'Shift to Off-Peak' : 'I-shift sa Off-Peak'}
               </Text>
               <Text style={[styles.switchSub, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Mag-plantsa/laba bago 8 AM o tapos 9 PM (+₱160/mo)
+                {isEnglish ? 'Iron/laundry before 8 AM or after 9 PM (+₱160/mo)' : 'Mag-plantsa/laba bago 8 AM o tapos 9 PM (+₱160/mo)'}
               </Text>
             </View>
             <Switch
@@ -225,10 +236,10 @@ export default function WhatIfModal() {
           <View style={styles.switchRow}>
             <View style={styles.switchLabelCol}>
               <Text style={[styles.switchTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                🧊 Refrigerator Eco Mode
+                Refrigerator Eco Mode
               </Text>
               <Text style={[styles.switchSub, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Katamtamang dial at malinis na pinto (+₱110/mo)
+                {isEnglish ? 'Medium dial & clean door seal (+₱110/mo)' : 'Katamtamang dial at malinis na pinto (+₱110/mo)'}
               </Text>
             </View>
             <Switch
@@ -243,7 +254,9 @@ export default function WhatIfModal() {
         {/* Tip Box */}
         <View style={[styles.tipCard, { backgroundColor: theme.okBg, borderColor: theme.ok }]}>
           <Text style={[styles.tipBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
-            💡 Tip: Ang 24°C hanggang 25°C ang DOE standard para sa balanseng ginhawa at tipid.
+            {isEnglish
+              ? 'Tip: 24°C to 25°C is the DOE standard for balanced comfort and energy savings.'
+              : 'Tip: Ang 24°C hanggang 25°C ang DOE standard para sa balanseng ginhawa at tipid.'}
           </Text>
         </View>
 
@@ -252,7 +265,7 @@ export default function WhatIfModal() {
           onPress={handleApplyToAgent}
         >
           <Text style={[styles.applyBtnText, { color: theme.brandInk, fontSize: 15 * fontScale }]}>
-            🤖 I-apply ang Settings
+            {isEnglish ? 'Apply Settings' : 'I-apply ang Settings'}
           </Text>
         </TouchableOpacity>
 

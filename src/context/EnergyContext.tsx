@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import { ExtractedBillData, SmartPlugDevice, SmartPlugSchedule, CANProfile, MeterType } from '../types';
+import { unlockSpeechSynthesis } from '../lib/audioService';
 import { mockSmartPlugService } from '../lib/mockSmartPlugService';
 import { smartPlugSimulator, INITIAL_SMART_PLUGS } from '../lib/smartPlugSimulator';
 import { calculateMeralcoBill } from '../lib/tariffEngine';
@@ -29,12 +31,15 @@ export interface EnergyState {
   canProfiles: CANProfile[];
   activeCanId: string;
   activeCanProfile: CANProfile;
+  pendingTipiPrompt: string | null;
 }
 
 export interface EnergyContextValue extends EnergyState {
   setBudget: (budget: number) => void;
   setActiveBill: (bill: ExtractedBillData) => void;
   addChatMessage: (sender: 'user' | 'tipi', text: string) => void;
+  askTipi: (prompt: string) => void;
+  clearPendingTipiPrompt: () => void;
   fastForwardTelemetry: (days: number) => void;
   injectSpike: (watts: number) => void;
   refreshTelemetry: () => Promise<void>;
@@ -110,12 +115,7 @@ const DEFAULT_STATE: EnergyState = {
   projected: 2840,
   currentKwh: 188,
   activeBill: DEFAULT_BILL,
-  chatHistory: [
-    {
-      sender: 'tipi',
-      text: 'Kamusta! Ako si Tipi. Nakikita ko na nasa ₱2,840 ang projected bill mo sa ₱3,500 na budget. 12 kWh na lang bago pumasok sa Tier 2!',
-    },
-  ],
+  chatHistory: [],
   smartPlugs: INITIAL_SMART_PLUGS,
   totalActiveWatts: 1053.0,
   isPlugConnected: false,
@@ -124,6 +124,7 @@ const DEFAULT_STATE: EnergyState = {
   canProfiles: PRESET_CAN_PROFILES,
   activeCanId: 'can-1',
   activeCanProfile: PRESET_CAN_PROFILES[0],
+  pendingTipiPrompt: null,
 };
 
 export const EnergyContext = createContext<EnergyContextValue>({
@@ -131,6 +132,8 @@ export const EnergyContext = createContext<EnergyContextValue>({
   setBudget: () => {},
   setActiveBill: () => {},
   addChatMessage: () => {},
+  askTipi: () => {},
+  clearPendingTipiPrompt: () => {},
   fastForwardTelemetry: () => {},
   injectSpike: () => {},
   refreshTelemetry: async () => {},
@@ -164,6 +167,7 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [projected, setProjected] = useState<number>(DEFAULT_STATE.projected);
   const [activeBill, setActiveBillState] = useState<ExtractedBillData | null>(DEFAULT_STATE.activeBill);
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>(DEFAULT_STATE.chatHistory);
+  const [pendingTipiPrompt, setPendingTipiPrompt] = useState<string | null>(null);
 
   // Smart Plug Simulator State
   const [smartPlugs, setSmartPlugs] = useState<SmartPlugDevice[]>(INITIAL_SMART_PLUGS);
@@ -501,6 +505,18 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setVoiceSecondsLeft(secondsLeft);
   }, []);
 
+  const askTipi = useCallback((prompt: string) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+    unlockSpeechSynthesis();
+    setPendingTipiPrompt(trimmed);
+    router.push('/(tabs)/tanong');
+  }, []);
+
+  const clearPendingTipiPrompt = useCallback(() => {
+    setPendingTipiPrompt(null);
+  }, []);
+
   return (
     <EnergyContext.Provider
       value={{
@@ -517,9 +533,12 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         canProfiles,
         activeCanId,
         activeCanProfile,
+        pendingTipiPrompt,
         setBudget,
         setActiveBill,
         addChatMessage,
+        askTipi,
+        clearPendingTipiPrompt,
         fastForwardTelemetry,
         injectSpike,
         refreshTelemetry,

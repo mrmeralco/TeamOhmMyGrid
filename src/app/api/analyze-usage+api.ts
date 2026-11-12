@@ -11,24 +11,38 @@ const schema = {
   }, required: ['will_exceed_budget', 'culprit_appliance', 'projected_final_bill', 'alert_message'],
   additionalProperties: false,
 };
+const GEMINI_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'];
 async function generate(scenario: UsageScenario): Promise<UsageAnalysis> {
   const demo = getUsageDemo(scenario);
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 35000 } });
-  const result = await client.interactions.create({
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-    input: 'You are Tipi, a concise Filipino household energy coach. Analyze this mock dataset: ' + JSON.stringify(demo) +
-      '. Each reading is average W for one hour. 13:00-16:00 is exactly three hours; evening is 18:00-24:00. ' +
-      'Use projected_final_bill exactly ' + demo.projected + ', and will_exceed_budget exactly ' + (demo.projected > demo.budget) + '. ' +
-      'The projection is currentBill + dailyKwh * daysLeft * rate. Assume the next five days repeat the average. ' +
-      'A rise from 150W to 1600W means about 1450W additional load. Aircon is plausible, not certain. ' +
-      'Set culprit_appliance to a cautious hypothesis such as Possible aircon (unconfirmed). This is not validated NILM. ' +
-      'Write alert_message in at most 3 short sentences and 55 words of friendly Taglish. Use everyday words elderly people understand. Avoid jargon. If over budget, state projected excess and suggest one action. ' +
-      'Otherwise explain on-track status and projected remaining margin. Mention the appliance is only an estimate. ' +
-      'This is an illustrative flat-rate estimate, not an actual Meralco bill. Return only the requested JSON.',
-    response_format: { type: 'text', mime_type: 'application/json', schema },
-  });
-  if (!result.output_text) throw new Error('Empty model response');
-  return parseUsageAnalysis(result.output_text, scenario);
+  const preferred = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  const models = [preferred, ...GEMINI_MODELS.filter((m) => m !== preferred)];
+  const prompt =
+    'You are Tipi, a concise Filipino household energy coach. Analyze this mock dataset: ' + JSON.stringify(demo) +
+    '. Each reading is average W for one hour. 13:00-16:00 is exactly three hours; evening is 18:00-24:00. ' +
+    'Use projected_final_bill exactly ' + demo.projected + ', and will_exceed_budget exactly ' + (demo.projected > demo.budget) + '. ' +
+    'The projection is currentBill + dailyKwh * daysLeft * rate. Assume the next five days repeat the average. ' +
+    'A rise from 150W to 1600W means about 1450W additional load. Aircon is plausible, not certain. ' +
+    'Set culprit_appliance to a cautious hypothesis such as Possible aircon (unconfirmed). This is not validated NILM. ' +
+    'Write alert_message in at most 3 short sentences and 55 words of friendly Taglish. Use everyday words elderly people understand. Avoid jargon. If over budget, state projected excess and suggest one action. ' +
+    'Otherwise explain on-track status and projected remaining margin. Mention the appliance is only an estimate. ' +
+    'This is an illustrative flat-rate estimate, not an actual Meralco bill. Return only the requested JSON.';
+
+  let lastError: unknown;
+  for (const model of models) {
+    try {
+      const result = await client.interactions.create({
+        model,
+        input: prompt,
+        response_format: { type: 'text', mime_type: 'application/json', schema },
+      });
+      if (!result.output_text) throw new Error('Empty model response');
+      return parseUsageAnalysis(result.output_text, scenario);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Empty model response');
 }
 export async function POST(request: Request) {
   const token = request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1];

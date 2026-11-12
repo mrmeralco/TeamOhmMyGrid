@@ -187,7 +187,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                   />
                   <View style={[styles.zoomPill, { backgroundColor: theme.ink + 'CC' }]}>
                     <Text style={styles.zoomPillText}>
-                      {photoExpanded ? '🔍 I-minimize' : '🔍 I-tap para i-zoom'}
+                      {photoExpanded ? 'I-minimize' : 'I-tap para i-zoom'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -219,7 +219,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                       fontSize: 12 * fontScale,
                     }}
                   >
-                    ⏱️ 5-Dial Pointer
+                    5-Dial Pointer
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -241,7 +241,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                       fontSize: 12 * fontScale,
                     }}
                   >
-                    🔢 Mechanical Drum
+                    Mechanical Drum
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -420,7 +420,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                 ]}
               >
                 <Text style={[styles.alertTitle, { color: theme.danger, fontSize: 13 * fontScale }]}>
-                  ⚠️ Mas Mababa ang Reading!
+                  Mas Mababa ang Reading!
                 </Text>
                 <Text style={[styles.alertBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
                   Ang kasalukuyang reading ({currentReadingNumber} kWh) ay mas mababa kaysa nakaraan ({previousReadingKwh} kWh). Pakitiyak ang mga dial sa litrato.
@@ -436,7 +436,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                 ]}
               >
                 <Text style={[styles.alertTitle, { color: theme.warn, fontSize: 13 * fontScale }]}>
-                  ⚠️ Spike Alert sa Konsumo!
+                  Spike Alert sa Konsumo!
                 </Text>
                 <Text style={[styles.alertBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
                   Lampas sa 150 kWh ang konsumo para sa isang linggo ({deltaCalc.weeklyUsageKwh} kWh). Siguraduhing tama ang pagbasa sa 10,000s at 1,000s dials.
@@ -452,7 +452,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                 ]}
               >
                 <Text style={[styles.alertTitle, { color: theme.ok, fontSize: 13 * fontScale }]}>
-                  ℹ️ 5-Dial Rollover Na-detect
+                  5-Dial Rollover Na-detect
                 </Text>
                 <Text style={[styles.alertBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
                   Lumampas na sa 99,999 pabalik sa 00,000 ang metro. Ang kalkuladong lingguhang konsumo ay {deltaCalc.weeklyUsageKwh} kWh.
@@ -470,7 +470,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
               accessibilityLabel="Kumuha muli ng litrato"
             >
               <Text style={[styles.retakeBtnText, { color: theme.ink, fontSize: 14 * fontScale }]}>
-                📷 Kumuha Muli
+                Kumuha Muli
               </Text>
             </TouchableOpacity>
 
@@ -481,7 +481,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
               accessibilityLabel="Kumpirmahin at I-save ang reading"
             >
               <Text style={[styles.confirmBtnText, { color: theme.brandInk, fontSize: 14.5 * fontScale }]}>
-                Kumpirmahin at I-save ✓
+                Kumpirmahin at I-save
               </Text>
             </TouchableOpacity>
           </View>

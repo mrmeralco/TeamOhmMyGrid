@@ -138,7 +138,7 @@ export const HeaderAlertButton: React.FC<HeaderAlertButtonProps> = ({ badgeCount
               <View style={styles.headerLeft}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[styles.dropdownTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-                    🔔 Mga Babala (Alerts)
+                    Mga Babala (Alerts)
                   </Text>
                   {displayCount > 0 && (
                     <View style={[styles.titleBadge, { backgroundColor: theme.brand }]}>
@@ -177,7 +177,7 @@ export const HeaderAlertButton: React.FC<HeaderAlertButtonProps> = ({ badgeCount
                     </Text>
                   </View>
                   <Text style={[styles.alertItemTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                    ⚡ High Grid Demand Alert
+                    High Grid Demand Alert
                   </Text>
                   <Text style={[styles.alertItemSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
                     Mataas ang strain sa Luzon Grid. Ipagpaliban ang washing machine at plantsa paglampas ng 6:00 PM.
@@ -197,7 +197,7 @@ export const HeaderAlertButton: React.FC<HeaderAlertButtonProps> = ({ badgeCount
                     </Text>
                   </View>
                   <Text style={[styles.alertItemTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                    ⚠️ Projected Bill Shock
+                    Projected Bill Shock
                   </Text>
                   <Text style={[styles.alertItemSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
                     Tinatayang aabot sa ₱{projected.toLocaleString()} ang bill mo vs ₱{budget.toLocaleString()} na budget.
@@ -217,7 +217,7 @@ export const HeaderAlertButton: React.FC<HeaderAlertButtonProps> = ({ badgeCount
                     </Text>
                   </View>
                   <Text style={[styles.alertItemTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                    📈 Malapit na sa Tier {cliff.currentTier + 1}
+                    Malapit na sa Tier {cliff.currentTier + 1}
                   </Text>
                   <Text style={[styles.alertItemSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
                     May {cliff.kwhRemaining} kWh na lang bago tumaas ang singil sa {cliff.nextTierThreshold} kWh threshold.
@@ -229,7 +229,7 @@ export const HeaderAlertButton: React.FC<HeaderAlertButtonProps> = ({ badgeCount
               {!isPeakActive && !isShockActive && !isCliffActive && (
                 <View style={styles.emptyWrap}>
                   <Text style={[styles.emptyText, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                    ✅ Lahat ay maayos. Walang aktibong babala sa ngayon!
+                    Lahat ay maayos. Walang aktibong babala sa ngayon!
                   </Text>
                 </View>
               )}

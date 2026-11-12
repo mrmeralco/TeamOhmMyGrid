@@ -16,6 +16,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { SmartPlugDevice, SmartPlugSchedule } from '../../types';
 import { isScheduleActiveNow } from '../../lib/smartPlugSimulator';
+import { buildPlugsExplanationPrompt } from '../../lib/geminiService';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 
@@ -103,7 +104,8 @@ const ApplianceIcon: React.FC<{ iconId: string; color: string; size?: number }> 
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function SmartPlugsScreen() {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
   const {
     smartPlugs,
     totalActiveWatts,
@@ -114,6 +116,7 @@ export default function SmartPlugsScreen() {
     setPlugTimer,
     cancelPlugTimer,
     setPlugSchedule,
+    askTipi,
   } = useEnergy();
 
   // Filter state
@@ -266,8 +269,16 @@ export default function SmartPlugsScreen() {
         {/* Top Header */}
         <View style={styles.topHeader}>
           <View style={styles.headerTextGroup}>
-            <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale }]}>
-              Mga Smart Plug
+            <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? (
+                <>
+                  Smart <Text style={{ color: '#FF6B00' }}>Plugs</Text>
+                </>
+              ) : (
+                <>
+                  Mga <Text style={{ color: '#FF6B00' }}>Smart Plug</Text>
+                </>
+              )}
             </Text>
             <Text style={[styles.subTitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
               Live IoT Telemetry & Relay Control
@@ -327,7 +338,7 @@ export default function SmartPlugsScreen() {
                 </Text>
               </View>
               <Text style={[styles.masterSubtext, { color: theme.muted, fontSize: 12 * fontScale }]}>
-                Kabuuang konsumo ng mga saksakan
+                {isEnglish ? 'Total active plug power draw' : 'Kabuuang konsumo ng mga saksakan'}
               </Text>
             </View>
 
@@ -357,7 +368,7 @@ export default function SmartPlugsScreen() {
                       },
                     ]}
                   >
-                    {activeCount} ng {smartPlugs.length} Bukás
+                    {isEnglish ? `${activeCount} of ${smartPlugs.length} Active` : `${activeCount} ng ${smartPlugs.length} Bukás`}
                   </Text>
                 </View>
               </View>
@@ -371,7 +382,7 @@ export default function SmartPlugsScreen() {
                 {totalKwh} kWh
               </Text>
               <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Naiipong Enerhiya
+                {isEnglish ? 'Accumulated Energy' : 'Naiipong Enerhiya'}
               </Text>
             </View>
 
@@ -382,7 +393,7 @@ export default function SmartPlugsScreen() {
                 ₱{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
               <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Halaga sa Buwan
+                {isEnglish ? 'Monthly Cost' : 'Halaga sa Buwan'}
               </Text>
             </View>
 
@@ -407,13 +418,13 @@ export default function SmartPlugsScreen() {
               ]}
               onPress={() => handleMasterTurnAll('OFF')}
               accessibilityRole="button"
-              accessibilityLabel="Patayin ang lahat ng smart plug"
+              accessibilityLabel={isEnglish ? 'Turn off all smart plugs' : 'Patayin ang lahat ng smart plug'}
             >
               <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
                 <Rect x="4" y="4" width="16" height="16" rx="3" stroke={theme.ink} strokeWidth="2.5" />
               </Svg>
               <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                I-OFF Lahat
+                {isEnglish ? 'Turn All OFF' : 'I-OFF Lahat'}
               </Text>
             </TouchableOpacity>
 
@@ -424,16 +435,50 @@ export default function SmartPlugsScreen() {
               ]}
               onPress={() => handleMasterTurnAll('ON')}
               accessibilityRole="button"
-              accessibilityLabel="Buksan ang lahat ng smart plug"
+              accessibilityLabel={isEnglish ? 'Turn on all smart plugs' : 'Buksan ang lahat ng smart plug'}
             >
               <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
                 <Path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill={theme.brandInk} />
               </Svg>
               <Text style={[styles.masterBtnText, { color: theme.brandInk, fontSize: 12 * fontScale }]}>
-                I-ON Lahat
+                {isEnglish ? 'Turn All ON' : 'I-ON Lahat'}
               </Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.masterBtn,
+              {
+                backgroundColor: theme.cont,
+                borderColor: theme.line,
+                marginTop: 8,
+                paddingVertical: 11,
+              },
+            ]}
+            onPress={() =>
+              askTipi(
+                buildPlugsExplanationPrompt({
+                  activeCount,
+                  totalCount: smartPlugs.length,
+                  totalActiveWatts,
+                  totalKwh,
+                  totalCost,
+                  plugSummaries: smartPlugs.map(
+                    (p) =>
+                      `${p.name} (${p.relayState}, ${p.powerWatts.toFixed(0)}W, ₱${p.monthlyCost.toFixed(0)}/mo)`
+                  ),
+                  language,
+                })
+              )
+            }
+            accessibilityRole="button"
+            accessibilityLabel={isEnglish ? 'Explain Smart Plugs Consumption with Tipi' : 'Ipaliwanag kay Tipi ang Konsumo ng mga Smart Plug'}
+          >
+            <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 13 * fontScale }]}>
+              {isEnglish ? 'Explain Smart Plugs with Tipi' : 'Ipaliwanag kay Tipi ang Smart Plugs'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Filter Pills */}
@@ -443,11 +488,11 @@ export default function SmartPlugsScreen() {
           contentContainerStyle={styles.filterRow}
         >
           {[
-            { key: 'all', label: `Lahat (${smartPlugs.length})` },
-            { key: 'on', label: `Naka-ON (${activeCount})` },
-            { key: 'off', label: `Naka-OFF (${smartPlugs.length - activeCount})` },
-            { key: 'timer', label: `May Timer (${smartPlugs.filter((p) => p.timer?.active).length})` },
-            { key: 'schedule', label: `Naka-Schedule (${smartPlugs.filter((p) => p.schedule?.enabled).length})` },
+            { key: 'all', label: `${isEnglish ? 'All' : 'Lahat'} (${smartPlugs.length})` },
+            { key: 'on', label: `${isEnglish ? 'ON' : 'Naka-ON'} (${activeCount})` },
+            { key: 'off', label: `${isEnglish ? 'OFF' : 'Naka-OFF'} (${smartPlugs.length - activeCount})` },
+            { key: 'timer', label: `${isEnglish ? 'Timer' : 'May Timer'} (${smartPlugs.filter((p) => p.timer?.active).length})` },
+            { key: 'schedule', label: `${isEnglish ? 'Scheduled' : 'Naka-Schedule'} (${smartPlugs.filter((p) => p.schedule?.enabled).length})` },
           ].map((f) => (
             <TouchableOpacity
               key={f.key}

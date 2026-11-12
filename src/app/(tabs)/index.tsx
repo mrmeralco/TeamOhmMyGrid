@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -15,10 +16,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BudgetGauge } from '../../components/BudgetGauge';
 import { UsageAnalysisCard } from '../../components/UsageAnalysisCard';
-import { TipiMascot } from '../../components/TipiMascot';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { MeterClassificationBadge } from '../../components/MeterClassificationBadge';
+
+const APP_LOGO = require('../../../assets/app-logo.png');
 import { AmiCurveGraphCard } from '../../components/AmiCurveGraphCard';
 import { AmiPeakBreakdownCard } from '../../components/AmiPeakBreakdownCard';
 import { AnalogPhotographyGuideModal } from '../../components/AnalogPhotographyGuideModal';
@@ -34,11 +36,15 @@ import {
 import { AnalogMeterLogEntry, AnalogMeterType, WeeklyAnalogSummary } from '../../types/analogMeter';
 import { AmiTimeframe } from '../../types/amiTelemetry';
 import { calculateTierCliff } from '../../lib/tariffEngine';
+import { buildDashboardExplanationPrompt } from '../../lib/geminiService';
 import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_USER } from '../../constants/mockData';
 
 export default function HomeScreen() {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
+  const isFilipino = language === 'filipino';
+  const greetingLead = isEnglish ? 'Good day,' : isFilipino ? 'Maligayang araw,' : 'Magandang araw,';
   const { user } = useAuth();
   const {
     budget,
@@ -47,6 +53,7 @@ export default function HomeScreen() {
     activeBill,
     setActiveBill,
     activeCanProfile,
+    askTipi,
   } = useEnergy();
 
   const cliff = calculateTierCliff(currentKwh);
@@ -168,10 +175,10 @@ export default function HomeScreen() {
         {/* Header Greeting */}
         <View style={styles.header}>
           <View style={styles.headerTextGroup}>
-            <Text style={[styles.greetingTitle, { color: theme.ink, fontSize: 22 * fontScale }]}>
-              Magandang araw, {userName}!
+            <Text style={[styles.greetingTitle, { color: theme.ink, fontSize: 22 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {greetingLead} <Text style={{ color: '#FF6B00' }}>{userName}!</Text>
             </Text>
-            <Text style={[styles.canSubtitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
+            <Text style={[styles.canSubtitle, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
               CAN: {canNumber} · {profileName}
             </Text>
             {/* Meter Classification Badge */}
@@ -179,7 +186,7 @@ export default function HomeScreen() {
               <MeterClassificationBadge
                 meterType={meterType}
                 size="standard"
-                showIcon
+                showIcon={false}
                 showSubtitle
                 onPress={() => {
                   if (!isAmi) {
@@ -190,7 +197,11 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.headerRightGroup}>
-            <TipiMascot size="mini" />
+            <Image
+              source={APP_LOGO}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
             <HeaderAlertButton from="index" />
             <HeaderSettingsButton />
           </View>
@@ -232,7 +243,7 @@ export default function HomeScreen() {
               <View style={styles.analogHeaderRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.analogCardTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-                    Analog Meter Log ⏱️
+                    Analog Meter Log
                   </Text>
                   <Text style={[styles.analogCardSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
                     {lastReadingDate} · {meterSerial}
@@ -242,10 +253,10 @@ export default function HomeScreen() {
                   style={[styles.guideTriggerBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
                   onPress={() => setGuideModalVisible(true)}
                   accessibilityRole="button"
-                  accessibilityLabel="Buksan ang gabay sa pagbasa ng analog meter"
+                  accessibilityLabel={isEnglish ? 'Open analog meter reading guide' : 'Buksan ang gabay sa pagbasa ng analog meter'}
                 >
                   <Text style={[styles.guideTriggerText, { color: theme.brand, fontSize: 12 * fontScale }]}>
-                    📖 Gabay
+                    {isEnglish ? 'Guide' : 'Gabay'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -257,7 +268,7 @@ export default function HomeScreen() {
                   onPress={() => handleCaptureAnalogPhoto()}
                   disabled={capturing}
                   accessibilityRole="button"
-                  accessibilityLabel="Kunan ng litrato ang analog meter"
+                  accessibilityLabel={isEnglish ? 'Take a photo of the analog meter' : 'Kunan ng litrato ang analog meter'}
                 >
                   {capturing ? (
                     <ActivityIndicator color={theme.brandInk} size="small" />
@@ -268,7 +279,7 @@ export default function HomeScreen() {
                         { color: theme.brandInk, fontSize: 13.5 * fontScale },
                       ]}
                     >
-                      📷 Kunan ng Litrato
+                      {isEnglish ? 'Take Photo' : 'Kunan ng Litrato'}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -277,10 +288,10 @@ export default function HomeScreen() {
                   style={[styles.manualEncodeBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
                   onPress={handleManualAnalogInput}
                   accessibilityRole="button"
-                  accessibilityLabel="Manu-manong i-encode ang reading"
+                  accessibilityLabel={isEnglish ? 'Manually encode meter reading' : 'Manu-manong i-encode ang reading'}
                 >
                   <Text style={[styles.manualEncodeBtnText, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                    ✍️ I-encode
+                    {isEnglish ? 'Encode' : 'I-encode'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -298,21 +309,21 @@ export default function HomeScreen() {
 
         {/* Live Grid Metrics Row */}
         <View style={styles.metricsRow}>
-          <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.line }]}>
-            <Text style={[styles.metricValue, { color: theme.brand, fontSize: 20 * fontScale }]}>
+          <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: '#FF6B0035' }]}>
+            <Text style={[styles.metricValue, { color: '#FF6B00', fontSize: 22 * fontScale, fontFamily: 'Coolvetica' }]}>
               {currentKwh} kWh
             </Text>
-            <Text style={[styles.metricLabel, { color: theme.muted, fontSize: 12 * fontScale }]}>
-              Konsumo
+            <Text style={[styles.metricLabel, { color: theme.muted, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? 'CONSUMPTION' : 'Konsumo'}
             </Text>
           </View>
 
-          <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: theme.line }]}>
-            <Text style={[styles.metricValue, { color: theme.ok, fontSize: 20 * fontScale }]}>
+          <View style={[styles.metricCard, { backgroundColor: theme.surface, borderColor: '#FF6B0035' }]}>
+            <Text style={[styles.metricValue, { color: '#FF6B00', fontSize: 22 * fontScale, fontFamily: 'Coolvetica' }]}>
               ₱{ratePerKwh}
             </Text>
-            <Text style={[styles.metricLabel, { color: theme.muted, fontSize: 12 * fontScale }]}>
-              Rate / kWh
+            <Text style={[styles.metricLabel, { color: theme.muted, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? 'CURRENT RATE' : 'Rate / kWh'}
             </Text>
           </View>
         </View>
@@ -322,30 +333,62 @@ export default function HomeScreen() {
           style={[styles.primaryActionCard, { backgroundColor: theme.brand }]}
           onPress={() => router.push('/whatif')}
           accessibilityRole="button"
-          accessibilityLabel="Buksan ang What-If Watt Calculator"
+          accessibilityLabel={isEnglish ? 'Open What-If Watt Calculator' : 'Buksan ang What-If Watt Calculator'}
         >
           <View style={styles.actionCardContent}>
-            <Text style={[styles.actionCardTitle, { color: theme.brandInk, fontSize: 16.5 * fontScale }]}>
-              What-If Watt-Calculator 💡
+            <Text style={[styles.actionCardTitle, { color: theme.brandInk, fontSize: 17 * fontScale, fontFamily: 'Coolvetica' }]}>
+              What-If Watt-Calculator
             </Text>
             <Text style={[styles.actionCardSub, { color: theme.brandInk, fontSize: 12.5 * fontScale }]}>
-              Kalkulahin ang tipid sa appliances.
+              {isEnglish ? 'Calculate potential appliance savings.' : 'Kalkulahin ang tipid sa appliances.'}
             </Text>
           </View>
         </TouchableOpacity>
 
         {/* Quick Action: Scan Meralco Bill */}
         <TouchableOpacity
-          style={[styles.secondaryActionCard, { backgroundColor: theme.surface, borderColor: theme.line }]}
+          style={[styles.secondaryActionCard, { backgroundColor: theme.surface, borderColor: '#FF6B0040' }]}
           onPress={() => router.push('/(tabs)/bill')}
           accessibilityRole="button"
-          accessibilityLabel="I-scan ang Meralco Bill"
+          accessibilityLabel={isEnglish ? 'Scan Meralco Bill' : 'I-scan ang Meralco Bill'}
         >
-          <Text style={[styles.secondaryTitle, { color: theme.ink, fontSize: 15.5 * fontScale }]}>
-            I-scan ang Meralco Bill 📄
+          <Text style={[styles.secondaryTitle, { color: theme.ink, fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
+            {isEnglish ? 'Scan Meralco Bill' : 'I-scan ang Meralco Bill'}
           </Text>
           <Text style={[styles.secondarySub, { color: theme.muted, fontSize: 12.5 * fontScale }]}>
-            I-upload ang litrato ng iyong bill.
+            {isEnglish
+              ? 'Take a photo or upload your electric bill copy.'
+              : 'I-upload ang litrato ng iyong bill.'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Quick Action: Explain Dashboard with Tipi */}
+        <TouchableOpacity
+          style={[styles.secondaryActionCard, { backgroundColor: theme.cont, borderColor: '#FF6B0035' }]}
+          onPress={() =>
+            askTipi(
+              buildDashboardExplanationPrompt({
+                profileName,
+                can: canNumber,
+                meterType,
+                currentKwh,
+                projected,
+                budget,
+                ratePerKwh,
+                language,
+              })
+            )
+          }
+          accessibilityRole="button"
+          accessibilityLabel={isEnglish ? 'Explain Consumption with Tipi' : 'Ipaliwanag kay Tipi ang Konsumo at Dashboard'}
+        >
+          <Text style={[styles.secondaryTitle, { color: theme.ink, fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
+            {isEnglish ? 'Explain Consumption with Tipi' : 'Ipaliwanag kay Tipi ang Konsumo'}
+          </Text>
+          <Text style={[styles.secondarySub, { color: theme.muted, fontSize: 12.5 * fontScale }]}>
+            {isEnglish
+              ? 'Get an AI breakdown of your consumption and budget.'
+              : 'Humingi ng AI paliwanag sa iyong konsumo at budget.'}
           </Text>
         </TouchableOpacity>
 
@@ -399,6 +442,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  headerLogo: {
+    width: 40,
+    height: 40,
   },
   greetingTitle: {
     fontWeight: '800',

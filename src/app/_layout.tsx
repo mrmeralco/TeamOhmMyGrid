@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useFonts } from 'expo-font';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { EnergyProvider } from '../context/EnergyContext';
@@ -11,6 +12,9 @@ import { initNotificationHandler, registerDailyPeakAlerts } from '../lib/notific
 function AppNavigator() {
   const { theme, mode } = useTheme();
   const { user, isLoading } = useAuth();
+  const [fontsLoaded, fontError] = useFonts({
+    Coolvetica: require('../../assets/fonts/Coolvetica.otf'),
+  });
   const segments = useSegments();
   const router = useRouter();
 
@@ -31,7 +35,7 @@ function AppNavigator() {
     }
   }, [user, isLoading, segments]);
 
-  if (isLoading) {
+  if (isLoading || (!fontsLoaded && !fontError)) {
     return (
       <View
         style={{
@@ -41,7 +45,7 @@ function AppNavigator() {
           backgroundColor: theme.bg,
         }}
       >
-        <ActivityIndicator size="large" color="#D95200" />
+        <ActivityIndicator size="large" color="#FF6B00" />
       </View>
     );
   }
@@ -56,8 +60,8 @@ function AppNavigator() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="register" options={{ headerShown: false, animation: 'slide_from_right' }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen
           name="whatif"
           options={{

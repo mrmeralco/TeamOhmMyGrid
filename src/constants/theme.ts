@@ -9,6 +9,9 @@ export interface ColorTheme {
   muted: string;
   brand: string;
   brandInk: string;
+  brandOrange: string;
+  brandOrangeRed: string;
+  brandGlow: string;
   ok: string;
   okBg: string;
   warn: string;
@@ -27,8 +30,11 @@ export const THEMES: Record<ThemeMode, ColorTheme> = {
     line: '#E7E1D6',
     ink: '#0F172A',
     muted: '#475569',
-    brand: '#D95200',
+    brand: '#FF5500',
     brandInk: '#FFFDF9',
+    brandOrange: '#FF6B00',
+    brandOrangeRed: '#FF451A',
+    brandGlow: '#FF3B1D',
     ok: '#065F46',
     okBg: '#D1FAE5',
     warn: '#92400E',
@@ -45,8 +51,11 @@ export const THEMES: Record<ThemeMode, ColorTheme> = {
     line: '#334155',
     ink: '#F8FAFC',
     muted: '#94A3B8',
-    brand: '#FF7A29',
+    brand: '#FF6433',
     brandInk: '#121824',
+    brandOrange: '#FF7A29',
+    brandOrangeRed: '#FF4D26',
+    brandGlow: '#FF3B1D',
     ok: '#34D399',
     okBg: '#064E3B',
     warn: '#FBBF24',
@@ -65,6 +74,9 @@ export const THEMES: Record<ThemeMode, ColorTheme> = {
     muted: '#000000',
     brand: '#000000',
     brandInk: '#FFD400',
+    brandOrange: '#000000',
+    brandOrangeRed: '#000000',
+    brandGlow: '#000000',
     ok: '#000000',
     okBg: '#FFFFFF',
     warn: '#000000',

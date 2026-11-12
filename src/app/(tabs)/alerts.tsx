@@ -11,7 +11,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../../context/ThemeContext';
+import { useEnergy } from '../../context/EnergyContext';
 import { scheduleApplianceDelayReminder } from '../../lib/notificationService';
+import { buildAlertsExplanationPrompt } from '../../lib/geminiService';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 
 interface ApplianceItem {
@@ -28,7 +30,9 @@ const APPLIANCES: ApplianceItem[] = [
 ];
 
 export default function AlertsScreen() {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
+  const { currentKwh, projected, budget, askTipi } = useEnergy();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const [activeFilter, setActiveFilter] = useState<'all' | 'budget' | 'peak'>('all');
 
@@ -51,7 +55,7 @@ export default function AlertsScreen() {
     const notificationId = await scheduleApplianceDelayReminder(appliance.name, delayMinutes);
     if (notificationId) {
       Alert.alert(
-        'Reminder Naka-set ⏰',
+        'Reminder Naka-set',
         `Pinaalalahanan ka sa ${appliance.name} pagkatapos ng ${hours} oras para makaiwas sa peak rates.`
       );
     } else {
@@ -80,8 +84,16 @@ export default function AlertsScreen() {
             </Svg>
           </TouchableOpacity>
           <View style={styles.headerTextGroup}>
-            <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale }]}>
-              Mga Babala at Scheduler
+            <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? (
+                <>
+                  <Text style={{ color: '#FF6B00' }}>Alerts</Text> & Scheduler
+                </>
+              ) : (
+                <>
+                  Mga <Text style={{ color: '#FF6B00' }}>Babala</Text> at Scheduler
+                </>
+              )}
             </Text>
             <Text style={[styles.subTitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
               Grid Peak Alerts & Action Reminders
@@ -113,7 +125,7 @@ export default function AlertsScreen() {
                   },
                 ]}
               >
-                {filter === 'all' ? 'Lahat' : filter === 'budget' ? 'Budget' : 'Peak Hours'}
+                {filter === 'all' ? (isEnglish ? 'All' : 'Lahat') : filter === 'budget' ? 'Budget' : 'Peak Hours'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -124,14 +136,16 @@ export default function AlertsScreen() {
           <View style={[styles.peakNoticeCard, { backgroundColor: theme.peakBg, borderColor: theme.peak }]}>
             <View style={styles.cardHeaderRow}>
               <Text style={[styles.cardTitle, { color: theme.ink, fontSize: 14 * fontScale }]}>
-                ⚡ Peak: 8:00 AM – 9:00 PM
+                Peak: 8:00 AM – 9:00 PM
               </Text>
               <Text style={[styles.cardTag, { color: theme.peak, fontSize: 11 * fontScale }]}>
-                Lunes – Sabado
+                {isEnglish ? 'Mon – Sat' : 'Lunes – Sabado'}
               </Text>
             </View>
             <Text style={[styles.cardSub, { color: theme.ink, fontSize: 12 * fontScale }]}>
-              Mataas ang demand sa grid. I-shift ang mabibigat na appliances sa off-peak.
+              {isEnglish
+                ? 'Grid demand is high. Shift heavy appliances to off-peak hours.'
+                : 'Mataas ang demand sa grid. I-shift ang mabibigat na appliances sa off-peak.'}
             </Text>
           </View>
         )}
@@ -141,11 +155,13 @@ export default function AlertsScreen() {
           <View style={[styles.budgetAlertCard, { backgroundColor: theme.warnBg, borderColor: theme.warn }]}>
             <View style={styles.cardHeaderRow}>
               <Text style={[styles.cardTitle, { color: theme.ink, fontSize: 14 * fontScale }]}>
-                ⚠️ 81% ng Buwanang Budget
+                {isEnglish ? '81% of Monthly Budget' : '81% ng Buwanang Budget'}
               </Text>
             </View>
             <Text style={[styles.cardSub, { color: theme.ink, fontSize: 12 * fontScale }]}>
-              May 10 araw pa bago ang cut-off. Bawasan ang oras ng aircon para hindi lumagpas sa ₱3,500.
+              {isEnglish
+                ? '10 days left before cut-off. Reduce aircon runtime to stay under ₱3,500.'
+                : 'May 10 araw pa bago ang cut-off. Bawasan ang oras ng aircon para hindi lumagpas sa ₱3,500.'}
             </Text>
           </View>
         )}
@@ -153,7 +169,7 @@ export default function AlertsScreen() {
         {/* Appliance Deferral Shift Scheduler */}
         <View style={styles.schedulerSection}>
           <Text style={[styles.sectionTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-            I-delay ang Appliances
+            {isEnglish ? 'Delay Appliances' : 'I-delay ang Appliances'}
           </Text>
 
           <View style={styles.applianceList}>
@@ -203,6 +219,35 @@ export default function AlertsScreen() {
             ))}
           </View>
         </View>
+
+        <TouchableOpacity
+          style={[
+            styles.applianceCard,
+            {
+              backgroundColor: theme.cont,
+              borderColor: theme.line,
+              marginTop: 12,
+              justifyContent: 'center',
+              paddingVertical: 13,
+            },
+          ]}
+          onPress={() =>
+            askTipi(
+              buildAlertsExplanationPrompt({
+                currentKwh,
+                projected,
+                budget,
+                language,
+              })
+            )
+          }
+          accessibilityRole="button"
+          accessibilityLabel={isEnglish ? 'Explain Peak Hours and Alerts with Tipi' : 'Ipaliwanag kay Tipi ang Peak Hours at Alerts'}
+        >
+          <Text style={[styles.applianceName, { color: theme.ink, fontSize: 14 * fontScale }]}>
+            {isEnglish ? 'Explain Peak Hours & Alerts with Tipi' : 'Ipaliwanag kay Tipi ang Peak Hours at Alerts'}
+          </Text>
+        </TouchableOpacity>
 
         <View style={{ height: 100 }} />
       </ScrollView>

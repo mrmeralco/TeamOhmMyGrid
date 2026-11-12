@@ -1,269 +1,235 @@
-import { useAuth } from '../context/AuthContext';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+} from 'react-native';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
+import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
-import { analyzeUsageData } from '../services/GeminiService';
-import { analyzeUsageWithGeminiClient } from '../lib/geminiService';
-import { getUsageDemo, UsageAnalysis, UsageScenario } from '../lib/usageAnalysis';
 
-const peso = (n: number) =>
-  '\u20b1' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const TIPI_MASCOT = require('../../assets/tipi-mascot.png');
 
 export function UsageAnalysisCard() {
-  const { user } = useAuth();
-  const { theme, fontScale } = useTheme();
-  const [scenario, setScenario] = useState<UsageScenario>('baseline');
-  const [analysis, setAnalysis] = useState<UsageAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
-  const demo = getUsageDemo(scenario);
+  const { fontScale, language } = useTheme();
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    const timer = setTimeout(() => controller.abort(), 45000);
-    setLoading(true);
-    setAnalysis(null);
-    setError('');
+  const handleCardPress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    router.push('/(tabs)/tanong');
+  };
 
-    analyzeUsageData(scenario, controller.signal)
-      .catch(async (primaryErr) => {
-        if (controller.signal.aborted) throw primaryErr;
-        if (process.env.EXPO_PUBLIC_GEMINI_API_KEY) {
-          return analyzeUsageWithGeminiClient(scenario, controller.signal);
-        }
-        throw primaryErr;
-      })
-      .then((value) => {
-        if (active) setAnalysis(value);
-      })
-      .catch((err) => {
-        if (active) {
-          setError(
-            err.name === 'AbortError'
-              ? 'Nag-timeout ang pagsusuri. Subukan muli.'
-              : err.message || 'Hindi available ang pagsusuri.'
-          );
-        }
-      })
-      .finally(() => {
-        clearTimeout(timer);
-        if (active) setLoading(false);
-      });
+  const isFilipino = language === 'filipino';
+  const isEnglish = language === 'english';
 
-    return () => {
-      active = false;
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [scenario, attempt, user?.id]);
+  const titleText = isEnglish
+    ? 'Start chat here'
+    : 'Simulan ang\nchat dito';
 
-  const color = analysis?.will_exceed_budget ? theme.danger : theme.ok;
+  const badgeText = 'TIPI AI';
+
+  const hintText = isEnglish
+    ? 'Ask anything about your bill'
+    : isFilipino
+    ? 'Magtanong ukol sa kuryente'
+    : 'Ask tips para makatipid';
+
+  const buttonText = isEnglish ? 'Chat now \u2192' : isFilipino ? 'Mag-chat \u2192' : 'Chat na \u2192';
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.line }]}>
-      <View style={styles.headerRow}>
-        <View style={styles.titleCol}>
-          <Text style={[styles.title, { color: theme.ink, fontSize: 16 * fontScale }]}>
-            Tipi Budget Analysis
+    <TouchableOpacity
+      onPress={handleCardPress}
+      activeOpacity={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={isEnglish ? 'Start chat here with Tipi' : 'Simulan ang chat dito kay Tipi'}
+    >
+      <View style={styles.card}>
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <SvgGradient id="tipiHeroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor="#FF4E00" />
+              <Stop offset="55%" stopColor="#FF7000" />
+              <Stop offset="100%" stopColor="#FFA100" />
+            </SvgGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" rx="22" ry="22" fill="url(#tipiHeroGrad)" />
+        </Svg>
+
+        {/* Decorative glowing circles in background */}
+        <View style={styles.ambientCircleOne} />
+        <View style={styles.ambientCircleTwo} />
+
+        {/* Left Text Column */}
+        <View style={styles.textSide}>
+          <View style={styles.badgePill}>
+            <View style={styles.livePulseDot} />
+            <Text style={[styles.badgeText, { fontSize: 11 * fontScale }]}>
+              {badgeText}
+            </Text>
+          </View>
+
+          <Text
+            style={[
+              styles.title,
+              { fontSize: 24 * fontScale, lineHeight: 28 * fontScale },
+            ]}
+            numberOfLines={2}
+          >
+            {titleText}
           </Text>
-          <Text style={[styles.metaLine, { color: theme.muted, fontSize: 12 * fontScale }]}>
-            {peso(demo.currentBill)} / {peso(demo.budget)} · {demo.daysLeft}d left
+
+          <Text
+            style={[styles.subtitle, { fontSize: 12 * fontScale }]}
+            numberOfLines={1}
+          >
+            {hintText}
           </Text>
+
+          <View style={styles.ctaButton}>
+            <Text style={[styles.ctaButtonText, { fontSize: 13 * fontScale }]}>
+              {buttonText}
+            </Text>
+          </View>
         </View>
 
-        <View style={[styles.segmented, { backgroundColor: theme.cont }]}>
-          {(['baseline', 'warning'] as const).map((option) => {
-            const active = scenario === option;
-            return (
-              <TouchableOpacity
-                key={option}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => {
-                  setLoading(true);
-                  setAnalysis(null);
-                  setError('');
-                  setScenario(option);
-                }}
-                disabled={active}
-                style={[
-                  styles.segmentBtn,
-                  active && { backgroundColor: theme.brand },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    {
-                      color: active ? theme.brandInk : theme.ink,
-                      fontSize: 11.5 * fontScale,
-                      fontWeight: active ? '800' : '600',
-                    },
-                  ]}
-                >
-                  {option === 'baseline' ? 'On-track' : 'Warning'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* Right Avatar Column (Static, no bounce animation) */}
+        <View style={styles.mascotContainer}>
+          <View style={styles.mascotWrapper}>
+            <Image
+              source={TIPI_MASCOT}
+              style={styles.mascotImage}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.floatingShadow} />
         </View>
       </View>
-
-      {loading ? (
-        <View style={styles.loadingRow} accessibilityLiveRegion="polite">
-          <ActivityIndicator size="small" color={theme.brand} />
-          <Text style={[styles.loadingText, { color: theme.muted, fontSize: 12.5 * fontScale }]}>
-            Sinusuri ni Tipi...
-          </Text>
-        </View>
-      ) : error ? (
-        <View style={styles.errorRow} accessibilityLiveRegion="polite">
-          <Text style={[styles.errorText, { color: theme.danger, fontSize: 12.5 * fontScale }]}>
-            {error}
-          </Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            onPress={() => setAttempt((n) => n + 1)}
-            style={[styles.inlineRetry, { borderColor: theme.brand }]}
-          >
-            <Text style={{ color: theme.brand, fontWeight: '700', fontSize: 12 * fontScale }}>
-              Subukan muli
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : analysis ? (
-        <View
-          style={[
-            styles.result,
-            { backgroundColor: analysis.will_exceed_budget ? theme.dangerBg : theme.okBg },
-          ]}
-          accessibilityLiveRegion="polite"
-        >
-          <View style={styles.resultTopRow}>
-            <Text style={[styles.statusLabel, { color, fontSize: 13 * fontScale }]}>
-              {analysis.will_exceed_budget ? '⚠️ Lampas sa Budget' : '✓ Pasok sa Budget'}
-            </Text>
-            <Text style={[styles.amount, { color, fontSize: 20 * fontScale }]}>
-              {peso(analysis.projected_final_bill)}
-            </Text>
-          </View>
-
-          <Text style={[styles.alertBody, { color: theme.ink, fontSize: 13.5 * fontScale }]}>
-            {analysis.alert_message}
-          </Text>
-
-          <View style={styles.resultFooterRow}>
-            <Text style={[styles.culpritText, { color: theme.muted, fontSize: 11.5 * fontScale }]}>
-              🔌 {analysis.culprit_appliance}
-            </Text>
-            <TouchableOpacity
-              accessibilityRole="button"
-              onPress={() => setAttempt((n) => n + 1)}
-            >
-              <Text style={{ color: theme.brand, fontWeight: '700', fontSize: 12 * fontScale }}>
-                ↻ I-refresh
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 14,
-    marginVertical: 6,
-    gap: 10,
-  },
-  headerRow: {
+    borderRadius: 22,
+    marginVertical: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    overflow: 'hidden',
+    minHeight: 145,
+    paddingLeft: 20,
+    paddingRight: 14,
+    paddingVertical: 18,
+    position: 'relative',
+    backgroundColor: '#FF6B00',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  titleCol: {
+  ambientCircleOne: {
+    position: 'absolute',
+    top: -30,
+    right: 40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  ambientCircleTwo: {
+    position: 'absolute',
+    bottom: -40,
+    left: -20,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  textSide: {
     flex: 1,
+    justifyContent: 'center',
+    zIndex: 2,
+    paddingRight: 8,
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+    gap: 5,
+  },
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFE600',
+  },
+  badgeText: {
+    color: '#FFEAA7',
+    fontFamily: 'Coolvetica',
+    letterSpacing: 1.2,
+    fontWeight: '400',
   },
   title: {
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontFamily: 'Coolvetica',
+    letterSpacing: 0.3,
+    fontWeight: '400',
+    marginBottom: 4,
   },
-  metaLine: {
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: 9999,
-    padding: 3,
-  },
-  segmentBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 9999,
-  },
-  segmentText: {
-    textAlign: 'center',
-  },
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-  },
-  loadingText: {
-    fontWeight: '600',
-  },
-  errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  errorText: {
-    flex: 1,
-    lineHeight: 18,
-  },
-  inlineRetry: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  result: {
-    borderRadius: 12,
-    padding: 12,
-    gap: 6,
-  },
-  resultTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  statusLabel: {
-    fontWeight: '800',
-  },
-  amount: {
-    fontWeight: '900',
-  },
-  alertBody: {
-    lineHeight: 19,
+  subtitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 10,
     fontWeight: '500',
   },
-  resultFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 2,
+  ctaButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  culpritText: {
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 8,
+  ctaButtonText: {
+    color: '#E64A00',
+    fontFamily: 'Coolvetica',
+    fontWeight: '400',
+    letterSpacing: 0.3,
+  },
+  mascotContainer: {
+    width: 125,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    height: 140,
+  },
+  mascotWrapper: {
+    width: '100%',
+    height: 125,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mascotImage: {
+    width: 120,
+    height: 125,
+  },
+  floatingShadow: {
+    width: 68,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    marginTop: -4,
   },
 });

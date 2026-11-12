@@ -34,7 +34,7 @@ const GUIDE_RULES_DIAL: GuideRule[] = [
   {
     id: 'angle',
     badge: 'Panuntunan 1',
-    icon: '📐',
+    icon: '01',
     title: '90° Diretsong Anggulo (Iwas-Parallax)',
     tagline: 'Pantay sa mukha ng metro, hindi patagilid',
     explanation:
@@ -45,7 +45,7 @@ const GUIDE_RULES_DIAL: GuideRule[] = [
   {
     id: 'glare',
     badge: 'Panuntunan 2',
-    icon: '☀️',
+    icon: '02',
     title: 'Iwas-Silaw at Liwanag (Tanggalin ang Flash)',
     tagline: 'Ambient daytime light, patayin ang camera flash',
     explanation:
@@ -56,7 +56,7 @@ const GUIDE_RULES_DIAL: GuideRule[] = [
   {
     id: 'framing',
     badge: 'Panuntunan 3',
-    icon: '🎯',
+    icon: '03',
     title: 'Tamang Framing (~70% ng Screen)',
     tagline: 'Nakasentro ang 5 dials at malinaw ang serial number',
     explanation:
@@ -67,7 +67,7 @@ const GUIDE_RULES_DIAL: GuideRule[] = [
   {
     id: 'dials',
     badge: 'Panuntunan 4',
-    icon: '⏱️',
+    icon: '04',
     title: 'Laging Kunin ang Mas Mababang Numero',
     tagline: 'Counter-rotating dials: 10,000s hanggang 1s',
     explanation:
@@ -80,7 +80,7 @@ const GUIDE_RULES_DIAL: GuideRule[] = [
 const CYCLOMETER_RULE_4: GuideRule = {
   id: 'dials',
   badge: 'Panuntunan 4',
-  icon: '🔢',
+  icon: '04',
   title: 'Basahin ang 5 Buong Drum Digits (Huwag Isama ang Pula)',
   tagline: 'Mechanical Drum (Cyclometer): 10,000s hanggang 1s',
   explanation:
@@ -155,7 +155,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                 },
               ]}
             >
-              ⏱️ 5-Dial Pointer
+              5-Dial Pointer
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -177,7 +177,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                 },
               ]}
             >
-              🔢 Mechanical Drum
+              Mechanical Drum
             </Text>
           </TouchableOpacity>
         </View>
@@ -210,7 +210,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                     },
                   ]}
                 >
-                  {rule.icon} Hakbang {idx + 1}
+                  Hakbang {idx + 1}
                 </Text>
               </TouchableOpacity>
             );
@@ -235,7 +235,6 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                   {currentRule.badge}
                 </Text>
               </View>
-              <Text style={styles.bigHeroIcon}>{currentRule.icon}</Text>
             </View>
 
             <Text style={[styles.cardTitle, { color: theme.ink, fontSize: 18 * fontScale }]}>
@@ -263,7 +262,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                 ]}
               >
                 <Text style={[styles.tipTitle, { color: theme.ok, fontSize: 12.5 * fontScale }]}>
-                  ✓ TAMA (Gawin Ito):
+                  TAMA (Gawin Ito):
                 </Text>
                 <Text style={[styles.tipBody, { color: theme.ink, fontSize: 13 * fontScale }]}>
                   {currentRule.doText}
@@ -280,7 +279,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                 ]}
               >
                 <Text style={[styles.tipTitle, { color: theme.danger, fontSize: 12.5 * fontScale }]}>
-                  ✕ MALI (Iwasan):
+                  MALI (Iwasan):
                 </Text>
                 <Text style={[styles.tipBody, { color: theme.ink, fontSize: 13 * fontScale }]}>
                   {currentRule.dontText}
@@ -340,7 +339,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                   { color: theme.ok, fontSize: 13 * fontScale },
                 ]}
               >
-                👉 Resulta: 14,285 kWh
+                Resulta: 14,285 kWh
               </Text>
             </View>
           )}
@@ -391,7 +390,7 @@ export const AnalogPhotographyGuideModal: React.FC<AnalogPhotographyGuideModalPr
                     { color: theme.brandInk, fontSize: 15 * fontScale },
                   ]}
                 >
-                  Kunan Na ng Litrato 📷
+                  Kunan Na ng Litrato
                 </Text>
               </TouchableOpacity>
             )}

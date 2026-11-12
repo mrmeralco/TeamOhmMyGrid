@@ -37,7 +37,8 @@
           "cameraPermission": "Allow KuryenTipid to take photos of Meralco bills."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ]
   }
 }

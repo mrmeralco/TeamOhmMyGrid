@@ -46,7 +46,8 @@ export const WeeklyAnalogCurveGraph: React.FC<WeeklyAnalogCurveGraphProps> = ({
   style,
   testID = 'weekly-analog-curve-graph',
 }) => {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
   const [internalSummary, setInternalSummary] = useState<WeeklyAnalogSummary | null>(null);
   const [chartWidth, setChartWidth] = useState<number>(320);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -180,12 +181,12 @@ export const WeeklyAnalogCurveGraph: React.FC<WeeklyAnalogCurveGraphProps> = ({
       <View style={styles.cardHeader}>
         <View style={styles.titleGroup}>
           <Text style={[styles.cardTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-            Lingguhang Konsumo
+            {isEnglish ? 'Weekly Consumption' : 'Lingguhang Konsumo'}
           </Text>
           {selectedPoint && (
             <Text style={[styles.cardSubtitle, { color: theme.muted, fontSize: 12 * fontScale }]}>
-              {formatDateLabel(selectedPoint.log.timestamp)} · Metro: {selectedPoint.log.readingKwh.toLocaleString()} kWh
-              {selectedPoint.log.isInterpolated ? ' (Tantiya)' : ''}
+              {formatDateLabel(selectedPoint.log.timestamp)} · {isEnglish ? 'Meter:' : 'Metro:'} {selectedPoint.log.readingKwh.toLocaleString()} kWh
+              {selectedPoint.log.isInterpolated ? (isEnglish ? ' (Estimated)' : ' (Tantiya)') : ''}
             </Text>
           )}
         </View>
@@ -206,7 +207,7 @@ export const WeeklyAnalogCurveGraph: React.FC<WeeklyAnalogCurveGraphProps> = ({
       <View style={[styles.statStrip, { backgroundColor: theme.cont }]}>
         <View style={styles.statItem}>
           <Text style={[styles.statLabel, { color: theme.muted, fontSize: 10.5 * fontScale }]}>
-            vs Nakaraan
+            {isEnglish ? 'vs Previous' : 'vs Nakaraan'}
           </Text>
           <Text
             style={[

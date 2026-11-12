@@ -60,11 +60,11 @@ export default function LoginScreen() {
     if (!identifier.trim()) return null;
     switch (detectedType) {
       case 'email':
-        return { label: '✉️ Email', color: '#0284c7' };
+        return { label: 'Email', color: '#0284c7' };
       case 'can':
-        return { label: '💳 Meralco CAN (10 Digits)', color: '#ea580c' };
+        return { label: 'Meralco CAN (10 Digits)', color: '#ea580c' };
       case 'username':
-        return { label: '👤 Username', color: '#16a34a' };
+        return { label: 'Username', color: '#16a34a' };
       default:
         return null;
     }
@@ -137,7 +137,7 @@ export default function LoginScreen() {
           {/* Rate Limit Alert */}
           {lockoutTimer !== null && lockoutTimer > 0 && (
             <View style={styles.lockoutBanner}>
-              <Text style={styles.lockoutTitle}>🛡️ Rate Limit Active</Text>
+              <Text style={styles.lockoutTitle}>Rate Limit Active</Text>
               <Text style={styles.lockoutText}>
                 Too many failed attempts. Please wait{' '}
                 <Text style={styles.lockoutCountdown}>
@@ -152,7 +152,7 @@ export default function LoginScreen() {
           {/* Error Banner */}
           {errorMsg && (!lockoutTimer || lockoutTimer <= 0) && (
             <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>⚠️ {errorMsg}</Text>
+              <Text style={styles.errorBannerText}>{errorMsg}</Text>
             </View>
           )}
 
@@ -210,7 +210,7 @@ export default function LoginScreen() {
                 style={styles.eyeBtn}
                 activeOpacity={0.7}
               >
-                <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+                <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -257,7 +257,7 @@ export default function LoginScreen() {
             onPress={() => setSeedModalVisible(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.demoAccountsBtnText}>⚡ Demo Meralco Accounts (Quick Fill)</Text>
+            <Text style={styles.demoAccountsBtnText}>Demo Meralco Accounts (Quick Fill)</Text>
           </TouchableOpacity>
 
           {/* Social Sign-in section matching Image 2 */}

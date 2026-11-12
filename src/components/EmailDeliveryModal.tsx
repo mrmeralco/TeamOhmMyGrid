@@ -42,9 +42,6 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
         <View style={styles.card}>
           {/* Email Envelope Header */}
           <View style={styles.header}>
-            <View style={styles.iconCircle}>
-              <Text style={styles.iconEmoji}>✉️</Text>
-            </View>
             <View style={styles.badgeRow}>
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>Verified: {user.email}</Text>
@@ -90,14 +87,14 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
                     activeOpacity={0.7}
                   >
                     <Text style={styles.copyBtnText}>
-                      {copied ? '✓ Copied to clipboard!' : '📋 Copy CAN Number'}
+                      {copied ? 'Copied to clipboard!' : 'Copy CAN Number'}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
                 {/* Login hint banner */}
                 <View style={styles.loginHintBox}>
-                  <Text style={styles.loginHintTitle}>💡 Paano mag-log in:</Text>
+                  <Text style={styles.loginHintTitle}>Paano mag-log in:</Text>
                   <Text style={styles.loginHintText}>
                     Maaari ka nang mag-log in gamit ang:
                   </Text>

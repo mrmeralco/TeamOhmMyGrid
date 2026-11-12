@@ -210,7 +210,7 @@ export const AmiCurveGraphCard: React.FC<AmiCurveGraphCardProps> = ({
       <View style={styles.headerRow}>
         <View>
           <Text style={[styles.cardTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-            {language === 'english' ? '⚡ AMI Real-Time Energy Curve' : '⚡ AMI Konsumo Curve'}
+            {language === 'english' ? 'AMI Real-Time Energy Curve' : 'AMI Konsumo Curve'}
           </Text>
           <Text style={[styles.cardSubtitle, { color: theme.muted, fontSize: 12 * fontScale }]}>
             {dataset.meterSerialNumber} · {displayedTotals.totalKwh.toFixed(2)} kWh

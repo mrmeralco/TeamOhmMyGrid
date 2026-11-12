@@ -114,11 +114,12 @@ export const AmiPeakBreakdownCard: React.FC<AmiPeakBreakdownCardProps> = ({
   const offPeakCost = Number((offPeakKwh * effectiveRate).toFixed(2));
 
   // Shift-savings recommendation
-  const recommendationText = calculatePeakSavingsRecommendation(
-    peakPercentage,
-    peakKwh,
-    effectiveRate
-  );
+  const recommendationText =
+    language === 'english'
+      ? peakPercentage > 35.0
+        ? 'Reduce consumption during peak hours (2-5 PM and 6-9 PM) and shift ironing or laundry to after 9 PM to save on electricity.'
+        : 'Your electricity consumption is well balanced, with most usage occurring during off-peak hours.'
+      : calculatePeakSavingsRecommendation(peakPercentage, peakKwh, effectiveRate);
 
   const isHighPeak = peakPercentage > 35.0;
 
@@ -138,7 +139,7 @@ export const AmiPeakBreakdownCard: React.FC<AmiPeakBreakdownCardProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.headerTextCol}>
           <Text style={[styles.cardTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-            {language === 'english' ? '📊 Peak vs Off-Peak' : '📊 Peak vs Off-Peak'}
+            Peak vs Off-Peak
           </Text>
         </View>
 
@@ -215,7 +216,7 @@ export const AmiPeakBreakdownCard: React.FC<AmiPeakBreakdownCardProps> = ({
         {/* Peak Energy Column */}
         <View style={[styles.metricTile, { backgroundColor: theme.cont, borderColor: theme.line }]}>
           <Text style={[styles.tileHeader, { color: theme.peak, fontSize: 11 * fontScale }]}>
-            ⚡ PEAK
+            PEAK
           </Text>
           <Text
             testID="peak-kwh-value"
@@ -231,7 +232,7 @@ export const AmiPeakBreakdownCard: React.FC<AmiPeakBreakdownCardProps> = ({
         {/* Off-Peak Energy Column */}
         <View style={[styles.metricTile, { backgroundColor: theme.cont, borderColor: theme.line }]}>
           <Text style={[styles.tileHeader, { color: theme.ok, fontSize: 11 * fontScale }]}>
-            🌙 OFF-PEAK
+            OFF-PEAK
           </Text>
           <Text
             testID="offpeak-kwh-value"
@@ -259,9 +260,6 @@ export const AmiPeakBreakdownCard: React.FC<AmiPeakBreakdownCardProps> = ({
         ]}
       >
         <View style={styles.savingsTopRow}>
-          <Text style={[styles.savingsIcon, { fontSize: 16 * fontScale }]}>
-            💡
-          </Text>
           <View style={styles.savingsTitleGroup}>
             <Text
               style={[

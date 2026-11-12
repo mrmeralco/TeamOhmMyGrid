@@ -67,6 +67,7 @@ export const SeedAccountsModal: React.FC<SeedAccountsModalProps> = ({
                   <MeterClassificationBadge
                     meterType={item.meterType || 'AMI'}
                     size="compact"
+                    showIcon={false}
                     showSubtitle={false}
                   />
                   <Text style={styles.tag}>Budget: ₱{item.monthlyBudget}</Text>
