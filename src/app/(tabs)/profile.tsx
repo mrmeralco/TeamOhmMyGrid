@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
@@ -22,6 +23,7 @@ import { useEnergy } from '../../context/EnergyContext';
 import { TEAM_INFO, MOCK_USER } from '../../constants/mockData';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
+import { PageTransitionView } from '../../components/PageTransitionView';
 import { MeterClassificationBadge } from '../../components/MeterClassificationBadge';
 import { formatCANDisplay } from '../../utils/validation';
 
@@ -186,75 +188,79 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.ink, fontSize: 28 * fontScale, fontFamily: 'Coolvetica', letterSpacing: 0.8 }]}>
-            {isEnglish ? 'Profile & ' : 'Profile at '}<Text style={{ color: '#FF6B00' }}>{isEnglish ? 'Settings' : 'Setting'}</Text>
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <HeaderAlertButton from="profile" />
-            <HeaderSettingsButton />
-          </View>
-        </View>
-
-        {/* Customer Account Info Card with Right-side CAN Selector Dropdown */}
-        <TouchableOpacity
-          style={[styles.accountCard, { backgroundColor: theme.surface, borderColor: theme.line }]}
-          onPress={() => setCanDropdownOpen(true)}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel={`CAN Profile: ${currentCan.name}, ${currentCan.accountNumber}. ${isEnglish ? 'Tap to switch.' : 'Pindutin para palitan.'}`}
-        >
-          <View style={[styles.avatarCircle, { backgroundColor: theme.brand }]}>
-            <Text style={[styles.avatarText, { color: theme.brandInk, fontSize: 16 * fontScale }]}>
-              {initials}
+      <PageTransitionView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.ink, fontSize: 26 * fontScale, fontFamily: 'Coolvetica', letterSpacing: 0.5 }]}>
+              {isEnglish ? 'Profile & ' : 'Profile at '}<Text style={{ color: '#FF6B00' }}>{isEnglish ? 'Settings' : 'Setting'}</Text>
             </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <HeaderAlertButton from="profile" />
+              <HeaderSettingsButton />
+            </View>
           </View>
 
-          <View style={styles.accountDetails}>
-            <View style={styles.profileNameRow}>
-              <Text style={[styles.accountName, { color: theme.ink, fontSize: 17 * fontScale }]}>
-                {displayName}
+          {/* Customer Account Info Card with Right-side CAN Selector Dropdown */}
+          <TouchableOpacity
+            style={[styles.accountCard, { backgroundColor: theme.surface, borderColor: '#FF6B0030', shadowColor: '#FF6B00' }]}
+            onPress={() => setCanDropdownOpen(true)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`CAN Profile: ${currentCan.name}, ${currentCan.accountNumber}. ${isEnglish ? 'Tap to switch.' : 'Pindutin para palitan.'}`}
+          >
+            <LinearGradient
+              colors={['#FF4D26', '#FF6B00']}
+              style={styles.avatarCircle}
+            >
+              <Text style={[styles.avatarText, { color: '#ffffff', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {initials}
               </Text>
-              <View style={[styles.activeCanBadge, { backgroundColor: theme.okBg, borderColor: theme.ok }]}>
-                <Text style={[styles.activeCanBadgeText, { color: theme.ok, fontSize: 10 * fontScale }]}>
-                  {currentCan.name}
+            </LinearGradient>
+
+            <View style={styles.accountDetails}>
+              <View style={styles.profileNameRow}>
+                <Text style={[styles.accountName, { color: theme.ink, fontSize: 17 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {displayName}
                 </Text>
+                <View style={[styles.activeCanBadge, { backgroundColor: '#FF6B0014', borderColor: '#FF6B0033' }]}>
+                  <Text style={[styles.activeCanBadgeText, { color: '#D95200', fontSize: 10 * fontScale, fontFamily: 'Coolvetica' }]}>
+                    {currentCan.name}
+                  </Text>
+                </View>
               </View>
+
+              <Text style={[styles.canNumber, { color: '#FF6B00', fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
+                CAN: {currentCan.accountNumber}
+              </Text>
+              <Text style={[styles.serviceAddress, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                {currentCan.serviceAddress}
+              </Text>
+              {user?.email ? (
+                <Text style={[styles.serviceAddress, { color: theme.muted, fontSize: 10 * fontScale, marginTop: 1 }]}>
+                  {user.email}
+                </Text>
+              ) : null}
             </View>
 
-            <Text style={[styles.canNumber, { color: theme.brand, fontSize: 13 * fontScale }]}>
-              CAN: {currentCan.accountNumber}
-            </Text>
-            <Text style={[styles.serviceAddress, { color: theme.muted, fontSize: 11 * fontScale }]}>
-              {currentCan.serviceAddress}
-            </Text>
-            {user?.email ? (
-              <Text style={[styles.serviceAddress, { color: theme.muted, fontSize: 10 * fontScale, marginTop: 1 }]}>
-                {user.email}
+            {/* Dropdown Selector on the Right Side of Profile Card with Small Arrow */}
+            <View
+              style={[styles.dropdownTriggerBtn, { backgroundColor: theme.cont, borderColor: '#FF6B0024' }]}
+            >
+              <Text style={[styles.dropdownTriggerText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? 'Switch' : 'Palitan'}
               </Text>
-            ) : null}
-          </View>
-
-          {/* Dropdown Selector on the Right Side of Profile Card with Small Arrow */}
-          <View
-            style={[styles.dropdownTriggerBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
-          >
-            <Text style={[styles.dropdownTriggerText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-              {isEnglish ? 'Switch' : 'Palitan'}
-            </Text>
-            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 3 }}>
-              <Path
-                d="M6 9L12 15L18 9"
-                stroke={theme.ink}
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </View>
-        </TouchableOpacity>
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 3 }}>
+                <Path
+                  d="M6 9L12 15L18 9"
+                  stroke={theme.ink}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </View>
+          </TouchableOpacity>
 
         {/* Monthly Budget Setting */}
         <View style={[styles.settingSection, { backgroundColor: theme.surface, borderColor: theme.line }]}>
@@ -361,8 +367,9 @@ export default function ProfileScreen() {
           ) : null}
         </TouchableOpacity>
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 110 }} />
       </ScrollView>
+    </PageTransitionView>
 
       {/* Multi-CAN Profiles Dropdown / Modal */}
       <Modal
@@ -631,15 +638,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  title: { fontWeight: '800' },
+  title: { fontWeight: '400', letterSpacing: 0.2 },
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1.5,
-    padding: 14,
+    padding: 16,
     marginVertical: 6,
     gap: 12,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   avatarCircle: {
     width: 48,
@@ -648,7 +660,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontWeight: '800' },
+  avatarText: { fontWeight: '400' },
   accountDetails: { flex: 1 },
   profileNameRow: {
     flexDirection: 'row',
@@ -656,16 +668,16 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
   },
-  accountName: { fontWeight: '800' },
+  accountName: { fontWeight: '400', letterSpacing: 0.3 },
   activeCanBadge: {
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
     borderWidth: 1,
   },
-  activeCanBadgeText: { fontWeight: '800' },
-  canNumber: { marginTop: 2, fontWeight: '700' },
-  serviceAddress: { marginTop: 1, fontWeight: '500' },
+  activeCanBadgeText: { fontWeight: '400' },
+  canNumber: { marginTop: 2, fontWeight: '400', letterSpacing: 0.4 },
+  serviceAddress: { marginTop: 1, fontWeight: '400' },
   dropdownTriggerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -675,15 +687,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   dropdownTriggerText: {
-    fontWeight: '700',
+    fontWeight: '400',
+    letterSpacing: 0.3,
   },
   settingSection: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1.5,
     padding: 16,
     marginVertical: 6,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  sectionTitle: { fontWeight: '800' },
+  sectionTitle: { fontWeight: '400', letterSpacing: 0.3 },
   sectionSubtitle: { fontWeight: '500', marginTop: 2, marginBottom: 4 },
   budgetControlRow: {
     flexDirection: 'row',
@@ -797,6 +815,8 @@ const styles = StyleSheet.create({
   logoutBtn: {
     borderWidth: 1.5,
     borderRadius: 14,
+    borderColor: '#FF4D2638',
+    backgroundColor: '#FF4D260D',
     paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: 'center',
@@ -805,12 +825,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   logoutBtnText: {
-    color: '#b91c1c',
-    fontWeight: '800',
+    color: '#FF451A',
+    fontWeight: '400',
+    letterSpacing: 0.3,
+    fontFamily: 'Coolvetica',
   },
   logoutSubText: {
-    color: '#991b1b',
-    fontWeight: '500',
+    color: '#FF4D26',
+    fontWeight: '400',
   },
   canList: { gap: 8 },
   canItemCard: {

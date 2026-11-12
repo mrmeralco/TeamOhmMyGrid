@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -29,7 +30,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { useEnergy } from '../../context/EnergyContext';
-import { TipiMascot } from '../../components/TipiMascot';
+const TIPI_MASCOT = require('../../../assets/tipi-mascot.png');
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { usePushToTalk } from '../../hooks/usePushToTalk';
@@ -42,6 +43,7 @@ import {
   subscribeTtsState,
   TtsPlaybackState,
 } from '../../lib/audioService';
+import { PageTransitionView } from '../../components/PageTransitionView';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -718,18 +720,23 @@ export default function TanongScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.container}
-      >
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: '#FF6B0018' }]}>
-          <TipiMascot isTalking={isTalking} size="mini" />
-          <View style={styles.headerInfo}>
-            <Text style={[styles.headerTitle, { color: theme.ink, fontSize: 18 * fontScale, fontFamily: 'Coolvetica' }]}>
-              {isEnglish ? 'Ask ' : 'Tanong kay '}<Text style={{ color: '#FF6B00' }}>Tipi</Text>
-            </Text>
-            <Text style={[styles.headerSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
+      <PageTransitionView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.container}
+        >
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: '#FF6B0018' }]}>
+            <Image
+              source={TIPI_MASCOT}
+              style={styles.headerAvatar}
+              resizeMode="contain"
+            />
+            <View style={styles.headerInfo}>
+              <Text style={[styles.headerTitle, { color: theme.ink, fontSize: 18 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? 'Ask ' : 'Tanong kay '}<Text style={{ color: '#FF6B00' }}>Tipi</Text>
+              </Text>
+              <Text style={[styles.headerSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
               {micPhase === 'recording'
                 ? isEnglish
                   ? 'Tipi is listening... release when done'
@@ -833,7 +840,11 @@ export default function TanongScreen() {
               >
                 {!isUser && (
                   <View style={styles.botAvatarWrapper}>
-                    <TipiMascot size="mini" isTalking={false} />
+                    <Image
+                      source={TIPI_MASCOT}
+                      style={styles.botAvatarImage}
+                      resizeMode="contain"
+                    />
                   </View>
                 )}
 
@@ -970,7 +981,11 @@ export default function TanongScreen() {
               style={[styles.messageRow, styles.tipiRow]}
             >
               <View style={styles.botAvatarWrapper}>
-                <TipiMascot size="mini" isTalking={false} />
+                <Image
+                  source={TIPI_MASCOT}
+                  style={styles.botAvatarImage}
+                  resizeMode="contain"
+                />
               </View>
               <View
                 style={[
@@ -989,6 +1004,7 @@ export default function TanongScreen() {
             </Animated.View>
           )}
         </ScrollView>
+
 
         {/* Chat Input Bar */}
         <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.line }]}>
@@ -1074,7 +1090,8 @@ export default function TanongScreen() {
 
         <View style={{ height: 80 }} />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </PageTransitionView>
+  </SafeAreaView>
   );
 }
 
@@ -1096,9 +1113,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: 12,
   },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+  },
   headerInfo: { flex: 1 },
-  headerTitle: { fontWeight: '800' },
-  headerSub: { fontWeight: '600', marginTop: 2 },
+  headerTitle: { fontWeight: '400', letterSpacing: 0.2 },
+  headerSub: { fontWeight: '400', marginTop: 2 },
   headerTtsControlBtn: {
     borderWidth: 1,
     borderRadius: 12,
@@ -1142,9 +1163,17 @@ const styles = StyleSheet.create({
   botAvatarWrapper: {
     width: 32,
     height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF6B0014',
+    borderWidth: 1,
+    borderColor: '#FF6B002B',
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  botAvatarImage: {
+    width: 26,
+    height: 26,
   },
   bubble: {
     maxWidth: '82%',

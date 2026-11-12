@@ -17,9 +17,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SeedAccountsModal } from '../components/SeedAccountsModal';
 import { SocialButtons } from '../components/SocialButtons';
 import { useAuth } from '../context/AuthContext';
+import { PageTransitionView } from '../components/PageTransitionView';
 import { CustomerRecord } from '../types/auth';
 import { detectIdentifierType, validateLoginIdentifier } from '../utils/validation';
 
@@ -121,18 +123,19 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.keyboardContainer}
     >
-      <ScrollView
-        contentContainerStyle={styles.pageBackground}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.phoneCard}>
-          {/* Header matching Image 2 */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Login here</Text>
-            <Text style={styles.subtitleBold}>Welcome back</Text>
-            <Text style={styles.subtitleBold}>to KuryenTipid!</Text>
-          </View>
+      <PageTransitionView style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.pageBackground}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.phoneCard}>
+            {/* Header matching Image 2 */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Login <Text style={{ color: '#FF4D26' }}>here</Text></Text>
+              <Text style={styles.subtitleBold}>Welcome back</Text>
+              <Text style={[styles.subtitleBold, { color: '#FF6B00' }]}>to KuryenTipid!</Text>
+            </View>
 
           {/* Rate Limit Alert */}
           {lockoutTimer !== null && lockoutTimer > 0 && (
@@ -233,8 +236,16 @@ export default function LoginScreen() {
             ]}
             onPress={handleLogin}
             disabled={isSubmitting || (lockoutTimer !== null && lockoutTimer > 0)}
-            activeOpacity={0.85}
+            activeOpacity={0.88}
           >
+            {!(isSubmitting || (lockoutTimer !== null && lockoutTimer > 0)) && (
+              <LinearGradient
+                colors={['#FF4D26', '#FF6B00']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[StyleSheet.absoluteFill, { borderRadius: 14 }]}
+              />
+            )}
             {isSubmitting ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
@@ -268,6 +279,7 @@ export default function LoginScreen() {
           />
         </View>
       </ScrollView>
+    </PageTransitionView>
 
       <SeedAccountsModal
         visible={seedModalVisible}
@@ -309,19 +321,21 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#ea580c',
-    marginBottom: 10,
-    letterSpacing: -0.4,
+    fontSize: 32,
+    fontWeight: '400',
+    color: '#FF6B00',
+    marginBottom: 8,
+    fontFamily: 'Coolvetica',
+    letterSpacing: 0.2,
   },
   subtitleBold: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '400',
     color: '#0f172a',
     textAlign: 'center',
     lineHeight: 24,
-    maxWidth: 220,
+    maxWidth: 240,
+    fontFamily: 'Coolvetica',
   },
   lockoutBanner: {
     backgroundColor: '#fef2f2',
@@ -400,19 +414,21 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   forgotPasswordText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#ea580c',
+    fontSize: 13,
+    fontWeight: '400',
+    color: '#FF5500',
+    fontFamily: 'Coolvetica',
   },
   signInBtn: {
-    backgroundColor: '#ea580c',
+    backgroundColor: '#FF5500',
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#ea580c',
+    overflow: 'hidden',
+    shadowColor: '#FF4D26',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.28,
     shadowRadius: 10,
     elevation: 5,
     marginBottom: 16,
@@ -425,20 +441,23 @@ const styles = StyleSheet.create({
   signInBtnText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '400',
+    fontFamily: 'Coolvetica',
+    letterSpacing: 0.4,
   },
   createAccountRow: {
     alignItems: 'center',
     marginBottom: 16,
   },
   createAccountText: {
-    fontSize: 13.5,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '400',
     color: '#475569',
+    fontFamily: 'Coolvetica',
   },
   demoAccountsBtn: {
-    backgroundColor: '#fff7ed',
-    borderColor: '#fed7aa',
+    backgroundColor: '#FF6B0014',
+    borderColor: '#FF6B0038',
     borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 10,
@@ -448,7 +467,8 @@ const styles = StyleSheet.create({
   },
   demoAccountsBtnText: {
     color: '#D95200',
-    fontSize: 12.5,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '400',
+    fontFamily: 'Coolvetica',
   },
 });

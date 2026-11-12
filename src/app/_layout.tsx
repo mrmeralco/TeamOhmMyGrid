@@ -57,6 +57,7 @@ function AppNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: theme.bg },
+          animation: 'fade',
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

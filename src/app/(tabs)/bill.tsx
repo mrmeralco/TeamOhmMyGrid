@@ -9,14 +9,15 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BillVerificationDrawer } from '../../components/BillVerificationDrawer';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
+import { PageTransitionView } from '../../components/PageTransitionView';
 import { parseMeralcoBillImage, buildBillExplanationPrompt } from '../../lib/geminiService';
 import { ExtractedBillData } from '../../types';
 import { formatCANDisplay } from '../../utils/validation';
@@ -73,7 +74,6 @@ export default function BillScreen() {
           quality: 0.8,
         });
       } catch {
-        // Fallback for environments where camera is not available (e.g. desktop web)
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           base64: true,
@@ -137,200 +137,287 @@ export default function BillScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.headerTextGroup}>
-            <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
-              {isEnglish ? 'Review ' : 'Suriin ang '}<Text style={{ color: '#FF6B00' }}>Bill</Text>
-            </Text>
-            <Text style={[styles.canSubtitle, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
-              CAN: {bill.customerAccountNumber} · {activeCanProfile?.name || 'Bahay'}
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <HeaderAlertButton from="bill" />
-            <HeaderSettingsButton />
-          </View>
-        </View>
-
-        {/* Bill Summary Card */}
-        <View style={[styles.billCard, { backgroundColor: theme.surface, borderColor: '#FF6B0035' }]}>
-          <Text style={[styles.amountDue, { color: theme.ink, fontSize: 32 * fontScale, fontFamily: 'Coolvetica' }]}>
-            ₱{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Text>
-
-          <View style={styles.metaRow}>
-            <Text style={[styles.metaText, { color: theme.muted, fontSize: 13 * fontScale }]}>
-              {isEnglish ? 'Consumption: ' : 'Konsumo: '}<Text style={{ color: theme.ink, fontWeight: '700' }}>{bill.totalKwh} kWh</Text>
-            </Text>
-            <Text style={[styles.metaText, { color: theme.muted, fontSize: 13 * fontScale }]}>
-              Due Date: <Text style={{ color: theme.ink, fontWeight: '700' }}>{bill.dueDate}</Text>
-            </Text>
-          </View>
-
-          {/* Month-over-Month Comparison */}
-          <View style={[styles.comparisonCard, { backgroundColor: theme.cont }]}>
-            <View style={styles.comparisonHeader}>
-              <Text style={[styles.comparisonTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                {isEnglish ? 'Comparison vs Previous' : 'Paghahambing sa Nakaraan'}
+      <PageTransitionView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <View style={styles.headerTextGroup}>
+              <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? 'Review ' : 'Suriin ang '}<Text style={{ color: '#FF6B00' }}>Bill</Text>
               </Text>
-              <View style={[styles.increaseBadge, { backgroundColor: theme.dangerBg }]}>
-                <Text style={[styles.increaseBadgeText, { color: theme.danger, fontSize: 11 * fontScale }]}>
-                  +{MOCK_BILL_BREAKDOWN.difference}
+              <View style={[styles.canBadge, { backgroundColor: '#FF6B0014', borderColor: '#FF6B0033' }]}>
+                <View style={styles.canIndicatorDot} />
+                <Text style={[styles.canSubtitle, { color: '#D95200', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  CAN: {bill.customerAccountNumber} · {activeCanProfile?.name || 'Bahay'}
                 </Text>
               </View>
             </View>
-            <Text style={[styles.comparisonText, { color: theme.muted, fontSize: 12 * fontScale }]}>
-              {isEnglish ? 'Last month' : 'Nakaraang buwan'}: ₱{MOCK_BILL_BREAKDOWN.lastMonthTotal.toLocaleString()} · Rate delta: {MOCK_BILL_BREAKDOWN.rateChange}
-            </Text>
-          </View>
-
-          {/* Segmented Cost Breakdown Bar */}
-          <Text style={[styles.breakdownHeader, { color: theme.ink, fontSize: 14 * fontScale }]}>
-            {isEnglish ? 'Charge Breakdown:' : 'Hati-hating Bayarin:'}
-          </Text>
-          <View style={styles.segmentedBar}>
-            <View style={[styles.barSlice, { flex: 58, backgroundColor: theme.brand }]} />
-            <View style={[styles.barSlice, { flex: 19, backgroundColor: theme.ok }]} />
-            <View style={[styles.barSlice, { flex: 9, backgroundColor: theme.warn }]} />
-            <View style={[styles.barSlice, { flex: 14, backgroundColor: theme.peak }]} />
-          </View>
-
-          {/* Breakdown Legend */}
-          <View style={styles.legendContainer}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: theme.brand }]} />
-              <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                Generation (58%): ₱{genCharge.toFixed(2)}
-              </Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: theme.ok }]} />
-              <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                Distribution (19%): ₱{distCharge.toFixed(2)}
-              </Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: theme.warn }]} />
-              <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                Transmission (9%): ₱{transCharge.toFixed(2)}
-              </Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: theme.peak }]} />
-              <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                {isEnglish ? 'VAT & Others' : 'VAT at Iba Pa'} (14%): ₱{taxCharge.toFixed(2)}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <HeaderAlertButton from="bill" />
+              <HeaderSettingsButton />
             </View>
           </View>
-        </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.primaryUploadBtn, { backgroundColor: theme.brand }]}
-            onPress={handleScanWithCamera}
-            disabled={analyzing}
-            accessibilityRole="button"
-            accessibilityLabel={isEnglish ? 'Scan Meralco bill with camera' : 'Kumuha ng litrato ng Meralco bill gamit ang camera'}
-          >
-            {analyzing ? (
-              <ActivityIndicator color={theme.brandInk} />
-            ) : (
-              <Text style={[styles.btnText, { color: theme.brandInk, fontSize: 15 * fontScale }]}>
-                {isEnglish ? 'Scan Bill (OCR)' : 'I-scan ang Bill (OCR)'}
+          {/* Bill Summary Card with Gradient Overlay */}
+          <View style={[styles.billCard, { backgroundColor: theme.surface, borderColor: '#FF6B0035' }]}>
+            <LinearGradient
+              colors={['#FF6B000C', '#FFA04018']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
+            />
+            <View style={styles.pillLabel}>
+              <Text style={[styles.labelBadge, { color: '#FF6B00', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? 'TOTAL AMOUNT DUE' : 'HALAGANG BABAYARAN'}
               </Text>
-            )}
-          </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity
-            style={[styles.secondaryInputBtn, { backgroundColor: theme.surface, borderColor: theme.line }]}
-            onPress={handleManualInput}
-          >
-            <Text style={[styles.secondaryBtnText, { color: theme.ink, fontSize: 14 * fontScale }]}>
-              {isEnglish ? 'Manual Input' : 'Manu-manong Input'}
+            <Text style={[styles.amountDue, { color: theme.ink, fontSize: 32 * fontScale, fontFamily: 'Coolvetica' }]}>
+              ₱{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Text>
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.tipiHelpBtn, { backgroundColor: theme.cont }]}
-            onPress={handleAskTipiAboutBill}
-          >
-            <Text style={[styles.tipiHelpText, { color: theme.ink, fontSize: 14 * fontScale }]}>
-              {isEnglish ? 'Explain Bill Line-by-Line with Tipi' : 'Ipaliwanag kay Tipi Line-by-Line'}
+            <View style={styles.metaRow}>
+              <Text style={[styles.metaText, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? 'Consumption: ' : 'Konsumo: '}<Text style={{ color: theme.ink, fontWeight: '700' }}>{bill.totalKwh} kWh</Text>
+              </Text>
+              <Text style={[styles.metaText, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
+                Due Date: <Text style={{ color: theme.ink, fontWeight: '700' }}>{bill.dueDate}</Text>
+              </Text>
+            </View>
+
+            {/* Month-over-Month Comparison */}
+            <View style={[styles.comparisonCard, { backgroundColor: theme.cont, borderColor: '#FF6B0024' }]}>
+              <View style={styles.comparisonHeader}>
+                <Text style={[styles.comparisonTitle, { color: theme.ink, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? 'Comparison vs Previous' : 'Paghahambing sa Nakaraan'}
+                </Text>
+                <View style={[styles.increaseBadge, { backgroundColor: theme.dangerBg, borderColor: theme.danger }]}>
+                  <Text style={[styles.increaseBadgeText, { color: theme.danger, fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
+                    +{MOCK_BILL_BREAKDOWN.difference}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.comparisonText, { color: theme.muted, fontSize: 12 * fontScale }]}>
+                {isEnglish ? 'Last month' : 'Nakaraang buwan'}: ₱{MOCK_BILL_BREAKDOWN.lastMonthTotal.toLocaleString()} · Rate delta: {MOCK_BILL_BREAKDOWN.rateChange}
+              </Text>
+            </View>
+
+            {/* Components Breakdown */}
+            <Text style={[styles.breakdownHeader, { color: theme.ink, fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? 'Components Breakdown' : 'Hati ng mga Gastusin'}
             </Text>
-          </TouchableOpacity>
-        </View>
 
-        <BillVerificationDrawer
-          visible={drawerVisible}
-          data={pendingBillData}
-          onConfirm={handleConfirmBill}
-          onCancel={() => setDrawerVisible(false)}
-        />
+            <View style={styles.segmentedBar}>
+              <View style={[styles.barSlice, { flex: 58, backgroundColor: '#FF4D26' }]} />
+              <View style={[styles.barSlice, { flex: 19, backgroundColor: '#FF6B00' }]} />
+              <View style={[styles.barSlice, { flex: 9, backgroundColor: '#FFA040' }]} />
+              <View style={[styles.barSlice, { flex: 14, backgroundColor: '#8B5CF6' }]} />
+            </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+            {/* Breakdown Legend */}
+            <View style={styles.legendContainer}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#FF4D26' }]} />
+                <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  Generation (58%): ₱{genCharge.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#FF6B00' }]} />
+                <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  Distribution (19%): ₱{distCharge.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#FFA040' }]} />
+                <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  Transmission (9%): ₱{transCharge.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#8B5CF6' }]} />
+                <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? 'VAT & Others' : 'VAT at Iba Pa'} (14%): ₱{taxCharge.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={styles.primaryUploadBtn}
+              onPress={handleScanWithCamera}
+              disabled={analyzing}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel="Kumuha ng litrato ng Meralco bill gamit ang camera"
+            >
+              <LinearGradient
+                colors={['#FF4D26', '#FF6B00']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[StyleSheet.absoluteFill, { borderRadius: 14 }]}
+              />
+              {analyzing ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={[styles.btnText, { color: '#ffffff', fontSize: 15 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? '📷 Scan Bill (OCR)' : '📷 I-scan ang Bill (OCR)'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.secondaryInputBtn, { backgroundColor: theme.surface, borderColor: '#FF6B0036' }]}
+              onPress={handleManualInput}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.secondaryBtnText, { color: theme.ink, fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? '✏️ Manual Input' : '✏️ Manu-manong Input'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tipiHelpBtn, { backgroundColor: theme.surface, borderColor: '#FF6B002B' }]}
+              onPress={handleAskTipiAboutBill}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tipiHelpText, { color: '#FF5500', fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
+                {isEnglish ? '💬 Explain Line-by-Line with Tipi' : '💬 Ipaliwanag kay Tipi Line-by-Line'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <BillVerificationDrawer
+            visible={drawerVisible}
+            data={pendingBillData}
+            onConfirm={handleConfirmBill}
+            onCancel={() => setDrawerVisible(false)}
+          />
+
+          <View style={{ height: 110 }} />
+        </ScrollView>
+      </PageTransitionView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 6 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+    marginTop: 4,
   },
   headerTextGroup: {
     flex: 1,
+    gap: 4,
   },
-  title: { fontWeight: '800' },
-  canSubtitle: { fontWeight: '600', marginTop: 2 },
+  title: {
+    fontWeight: '400',
+    letterSpacing: 0.2,
+  },
+  canBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+    marginTop: 2,
+  },
+  canIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF6B00',
+  },
+  canSubtitle: {
+    fontWeight: '400',
+    letterSpacing: 0.5,
+  },
   billCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1.5,
-    padding: 16,
+    padding: 18,
     marginVertical: 6,
+    overflow: 'hidden',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  amountDue: { fontWeight: '800', marginBottom: 4 },
+  pillLabel: {
+    backgroundColor: '#FF6B0014',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  labelBadge: {
+    fontWeight: '400',
+    letterSpacing: 0.8,
+  },
+  amountDue: {
+    fontWeight: '400',
+    marginBottom: 4,
+    letterSpacing: 0.4,
+  },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginVertical: 6,
-    paddingBottom: 6,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#FF6B0018',
   },
-  metaText: { fontWeight: '500' },
+  metaText: {
+    fontWeight: '400',
+    letterSpacing: 0.3,
+  },
   comparisonCard: {
-    borderRadius: 10,
-    padding: 8,
-    marginVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+    marginVertical: 8,
   },
   comparisonHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   comparisonTitle: {
-    fontWeight: '700',
+    fontWeight: '400',
+    letterSpacing: 0.3,
   },
   increaseBadge: {
     borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
   increaseBadgeText: {
-    fontWeight: '800',
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   comparisonText: {
-    fontWeight: '500',
+    fontWeight: '400',
+    lineHeight: 16,
   },
-  breakdownHeader: { fontWeight: '700', marginTop: 8, marginBottom: 6 },
+  breakdownHeader: {
+    fontWeight: '400',
+    marginTop: 8,
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
   segmentedBar: {
     flexDirection: 'row',
     height: 12,
@@ -339,31 +426,55 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   barSlice: { height: '100%' },
-  legendContainer: { marginTop: 8, gap: 4 },
+  legendContainer: { marginTop: 10, gap: 6 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontWeight: '600' },
-  actionsContainer: { marginTop: 10, gap: 8 },
+  legendText: {
+    fontWeight: '400',
+    letterSpacing: 0.3,
+  },
+  actionsContainer: { marginTop: 12, gap: 10 },
   primaryUploadBtn: {
-    height: 48,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#FF4D26',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  btnText: { fontWeight: '700' },
+  btnText: {
+    fontWeight: '400',
+    letterSpacing: 0.4,
+  },
   secondaryInputBtn: {
-    height: 46,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  secondaryBtnText: { fontWeight: '700' },
+  secondaryBtnText: {
+    fontWeight: '400',
+    letterSpacing: 0.4,
+  },
   tipiHelpBtn: {
-    height: 46,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tipiHelpText: { fontWeight: '700' },
+  tipiHelpText: {
+    fontWeight: '400',
+    letterSpacing: 0.4,
+  },
 });

@@ -9,10 +9,12 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTheme } from '../context/ThemeContext';
 import { useEnergy } from '../context/EnergyContext';
 import { calculateWhatIfSavings } from '../lib/tariffEngine';
+import { PageTransitionView } from '../components/PageTransitionView';
 import { buildWhatIfExplanationPrompt } from '../lib/geminiService';
 
 export default function WhatIfModal() {
@@ -79,58 +81,65 @@ export default function WhatIfModal() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header with Close Button */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: theme.ink, fontSize: 22 * fontScale, fontFamily: 'Coolvetica' }]}>
-            Watt-<Text style={{ color: '#FF6B00' }}>Calculator</Text>
-          </Text>
-          <TouchableOpacity
-            style={[styles.closeBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Isara ang calculator"
-          >
-            <Text style={[styles.closeBtnText, { color: theme.ink, fontSize: 16 * fontScale }]}>
-              ✕
+      <PageTransitionView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header with Close Button */}
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: theme.ink, fontSize: 22 * fontScale, fontFamily: 'Coolvetica' }]}>
+              Watt-<Text style={{ color: '#FF6B00' }}>Calculator</Text>
             </Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.closeBtn, { backgroundColor: theme.cont, borderColor: '#FF6B002B' }]}
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel={isEnglish ? 'Close calculator' : 'Isara ang calculator'}
+            >
+              <Text style={[styles.closeBtnText, { color: theme.ink, fontSize: 16 * fontScale }]}>
+                ✕
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Savings Big Result Card */}
-        <View style={[styles.resultCard, { backgroundColor: theme.surface, borderColor: theme.line }]}>
-          <Text style={[styles.resultLabel, { color: theme.muted, fontSize: 12 * fontScale }]}>
-            {isEnglish ? 'ESTIMATED MONTHLY SAVINGS' : 'TINATAYANG MATITIPID BAWAT BUWAN'}
-          </Text>
-          <Text style={[styles.savingsAmount, { color: theme.ok, fontSize: 36 * fontScale }]}>
-            ₱{totalPesosSaved.toFixed(2)}
-          </Text>
-          <Text style={[styles.savingsKwh, { color: theme.ink, fontSize: 14 * fontScale }]}>
-            {isEnglish ? (
-              <>
-                Saves <Text style={{ fontWeight: '800' }}>{totalKwhSaved} kWh</Text> in consumption
-              </>
-            ) : (
-              <>
-                Bawas <Text style={{ fontWeight: '800' }}>{totalKwhSaved} kWh</Text> sa konsumo
-              </>
+          {/* Savings Big Result Card */}
+          <View style={[styles.resultCard, { backgroundColor: theme.surface, borderColor: '#FF6B0030', shadowColor: '#FF6B00' }]}>
+            <LinearGradient
+              colors={['#FF6B000C', '#FFA04014']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
+            />
+            <Text style={[styles.resultLabel, { color: '#FF6B00', fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? 'ESTIMATED MONTHLY SAVINGS' : 'TINATAYANG MATITIPID BAWAT BUWAN'}
+            </Text>
+            <Text style={[styles.savingsAmount, { color: '#FF4D26', fontSize: 36 * fontScale, fontFamily: 'Coolvetica' }]}>
+              ₱{totalPesosSaved.toFixed(2)}
+            </Text>
+            <Text style={[styles.savingsKwh, { color: theme.ink, fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {isEnglish ? (
+                <>
+                  Saves <Text style={{ color: '#FF6B00' }}>{totalKwhSaved} kWh</Text> in consumption
+                </>
+              ) : (
+                <>
+                  Bawas <Text style={{ color: '#FF6B00' }}>{totalKwhSaved} kWh</Text> sa konsumo
+                </>
+              )}
+            </Text>
+
+            {simulation.achievedTierDrop && (
+              <View style={[styles.tierDropPill, { backgroundColor: '#10B9811A', borderColor: '#10B98133' }]}>
+                <Text style={[styles.tierDropText, { color: '#10B981', fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? '🎉 Drops into a lower distribution tier!' : '🎉 Bababa sa mas murang distribution tier!'}
+                </Text>
+              </View>
             )}
-          </Text>
 
-          {simulation.achievedTierDrop && (
-            <View style={[styles.tierDropPill, { backgroundColor: theme.okBg }]}>
-              <Text style={[styles.tierDropText, { color: theme.ok, fontSize: 12 * fontScale }]}>
-                {isEnglish ? 'Drops into a lower distribution tier!' : 'Bababa sa mas murang distribution tier!'}
+            <View style={[styles.formulaBox, { backgroundColor: theme.cont, borderColor: '#FF6B001F' }]}>
+              <Text style={[styles.formulaText, { color: theme.ink, fontSize: 12 * fontScale }]}>
+                Formula: {targetTemp}°C ({targetHours}h/{isEnglish ? 'day' : 'araw'}) + {unplugVampire ? 'standby ' : ''}{shiftPeakHours ? 'off-peak ' : ''}{fridgeEcoMode ? 'fridge ' : ''}savings
               </Text>
             </View>
-          )}
-
-          <View style={[styles.formulaBox, { backgroundColor: theme.cont }]}>
-            <Text style={[styles.formulaText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-              Formula: {targetTemp}°C ({targetHours}h/{isEnglish ? 'day' : 'araw'}) + {unplugVampire ? 'standby ' : ''}{shiftPeakHours ? 'off-peak ' : ''}{fridgeEcoMode ? 'fridge ' : ''}savings
-            </Text>
           </View>
-        </View>
 
         {/* Aircon Controls */}
         <View style={[styles.controlsCard, { backgroundColor: theme.surface, borderColor: theme.line }]}>
@@ -261,17 +270,25 @@ export default function WhatIfModal() {
         </View>
 
         <TouchableOpacity
-          style={[styles.applyBtn, { backgroundColor: theme.brand }]}
+          style={styles.applyBtn}
           onPress={handleApplyToAgent}
+          activeOpacity={0.88}
         >
-          <Text style={[styles.applyBtnText, { color: theme.brandInk, fontSize: 15 * fontScale }]}>
-            {isEnglish ? 'Apply Settings' : 'I-apply ang Settings'}
+          <LinearGradient
+            colors={['#FF4D26', '#FF6B00']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[StyleSheet.absoluteFill, { borderRadius: 14 }]}
+          />
+          <Text style={[styles.applyBtnText, { color: '#ffffff', fontSize: 15 * fontScale, fontFamily: 'Coolvetica' }]}>
+            🤖 {isEnglish ? 'Apply Settings' : 'I-apply ang Settings'}
           </Text>
         </TouchableOpacity>
 
         <View style={{ height: 30 }} />
       </ScrollView>
-    </SafeAreaView>
+    </PageTransitionView>
+  </SafeAreaView>
   );
 }
 
@@ -284,7 +301,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  title: { fontWeight: '800' },
+  title: { fontWeight: '400', letterSpacing: 0.2 },
   closeBtn: {
     width: 38,
     height: 38,
@@ -295,36 +312,47 @@ const styles = StyleSheet.create({
   },
   closeBtnText: { fontWeight: '700' },
   resultCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1.5,
-    padding: 14,
+    padding: 16,
     marginVertical: 6,
     alignItems: 'center',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  resultLabel: { fontWeight: '700', letterSpacing: 0.5, textAlign: 'center' },
-  savingsAmount: { fontWeight: '800', marginVertical: 2 },
+  resultLabel: { fontWeight: '400', letterSpacing: 0.8, textAlign: 'center' },
+  savingsAmount: { fontWeight: '400', letterSpacing: 0.4, marginVertical: 2 },
   savingsKwh: { fontWeight: '600' },
   tierDropPill: {
     borderRadius: 10,
+    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
     marginTop: 6,
   },
-  tierDropText: { fontWeight: '700' },
+  tierDropText: { fontWeight: '400', letterSpacing: 0.2 },
   formulaBox: {
     width: '100%',
     borderRadius: 10,
+    borderWidth: 1,
     padding: 8,
     marginTop: 8,
   },
   formulaText: { textAlign: 'center', fontWeight: '500' },
   controlsCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1.5,
-    padding: 14,
+    padding: 16,
     marginVertical: 6,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  cardSectionTitle: { fontWeight: '800', marginBottom: 8 },
+  cardSectionTitle: { fontWeight: '400', letterSpacing: 0.3, marginBottom: 8, fontFamily: 'Coolvetica' },
   controlRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
