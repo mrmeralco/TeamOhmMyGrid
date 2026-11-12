@@ -1,6 +1,12 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
 
 interface FloatingPillNavProps {
@@ -8,13 +14,127 @@ interface FloatingPillNavProps {
   onNavigate: (route: string) => void;
 }
 
+// Initial sensible center estimates for tabs before onLayout reports
+const DEFAULT_CENTERS: Record<string, number> = {
+  index: 43,
+  bill: 113,
+  plugs: 245,
+  profile: 315,
+};
+
+const CIRCLE_SIZE = 44;
+
 export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
   activeRoute,
   onNavigate,
 }) => {
-  const { theme, fontScale } = useTheme();
+  const { theme } = useTheme();
 
   const isTanongTab = activeRoute === 'tanong';
+
+  // Store layout measurements for tabs: { x, width }
+  const [tabLayouts, setTabLayouts] = useState<Record<string, { x: number; width: number }>>({});
+
+  const handleTabLayout = (route: string, layout: { x: number; width: number }) => {
+    setTabLayouts((prev) => {
+      const existing = prev[route];
+      if (
+        existing &&
+        Math.abs(existing.x - layout.x) < 0.5 &&
+        Math.abs(existing.width - layout.width) < 0.5
+      ) {
+        return prev;
+      }
+      return { ...prev, [route]: layout };
+    });
+  };
+
+  const initialCenter = DEFAULT_CENTERS[activeRoute] || DEFAULT_CENTERS.index;
+  const leftEdge = useSharedValue(initialCenter - CIRCLE_SIZE / 2);
+  const rightEdge = useSharedValue(initialCenter + CIRCLE_SIZE / 2);
+  const indicatorOpacity = useSharedValue(isTanongTab ? 0 : 1);
+
+  // Keep track of previous target center to determine movement direction
+  const prevCenterRef = useRef(initialCenter);
+
+  useEffect(() => {
+    if (activeRoute === 'tanong') {
+      indicatorOpacity.value = withTiming(0, { duration: 180 });
+      return;
+    }
+
+    indicatorOpacity.value = withTiming(1, { duration: 200 });
+
+    const layout = tabLayouts[activeRoute];
+    const targetCenter = layout
+      ? layout.x + layout.width / 2
+      : DEFAULT_CENTERS[activeRoute] || DEFAULT_CENTERS.index;
+    const prevCenter = prevCenterRef.current;
+    prevCenterRef.current = targetCenter;
+
+    const targetLeft = targetCenter - CIRCLE_SIZE / 2;
+    const targetRight = targetCenter + CIRCLE_SIZE / 2;
+
+    const distance = Math.abs(targetCenter - prevCenter);
+
+    if (distance < 2) {
+      // Resting on same tab
+      leftEdge.value = targetLeft;
+      rightEdge.value = targetRight;
+      return;
+    }
+
+    const isMovingRight = targetCenter > prevCenter;
+
+    if (isMovingRight) {
+      // Leading edge is rightEdge: shoots ahead quickly to stretch across
+      rightEdge.value = withSpring(targetRight, {
+        damping: 14,
+        stiffness: 160,
+        mass: 0.75,
+      });
+      // Trailing edge is leftEdge: lags slightly behind, creating the elastic stretch, then snaps back
+      leftEdge.value = withSpring(targetLeft, {
+        damping: 18,
+        stiffness: 115,
+        mass: 1.15,
+      });
+    } else {
+      // Leading edge is leftEdge: shoots ahead to the left first
+      leftEdge.value = withSpring(targetLeft, {
+        damping: 14,
+        stiffness: 160,
+        mass: 0.75,
+      });
+      // Trailing edge is rightEdge: lags slightly behind
+      rightEdge.value = withSpring(targetRight, {
+        damping: 18,
+        stiffness: 115,
+        mass: 1.15,
+      });
+    }
+  }, [activeRoute, tabLayouts, leftEdge, rightEdge, indicatorOpacity]);
+
+  const animatedIndicatorStyle = useAnimatedStyle(() => {
+    const left = leftEdge.value;
+    const right = rightEdge.value;
+    const width = Math.max(CIRCLE_SIZE, right - left);
+
+    // Dynamic fluid squash: when stretching horizontally, height pinches subtly for gooey liquid physics
+    const stretchProgress = Math.min(1, Math.max(0, (width - CIRCLE_SIZE) / 100));
+    const currentHeight = CIRCLE_SIZE - 6 * stretchProgress; // 44 down to 38
+    const top = (62 - currentHeight) / 2;
+    const borderRadius = currentHeight / 2;
+
+    return {
+      left,
+      width,
+      height: currentHeight,
+      top,
+      borderRadius,
+      opacity: indicatorOpacity.value,
+    };
+  });
 
   return (
     <View style={styles.outerContainer} pointerEvents="box-none">
@@ -28,9 +148,24 @@ export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
           },
         ]}
       >
+        {/* Fluid Stretching Active Indicator (Faded Dark Orange Circle / Pill) */}
+        <Animated.View
+          style={[
+            styles.fluidIndicator,
+            {
+              backgroundColor: `${theme.brand}24`,
+              borderColor: `${theme.brand}38`,
+              shadowColor: theme.brand,
+            },
+            animatedIndicatorStyle,
+          ]}
+          pointerEvents="none"
+        />
+
         {/* Tab 1: Home */}
         <TouchableOpacity
           style={styles.tab}
+          onLayout={(e) => handleTabLayout('index', e.nativeEvent.layout)}
           onPress={() => onNavigate('index')}
           accessibilityRole="tab"
           accessibilityLabel="Home"
@@ -51,14 +186,12 @@ export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
               strokeWidth="2.2"
             />
           </Svg>
-          {activeRoute === 'index' && (
-            <View style={[styles.activeDot, { backgroundColor: theme.brand }]} />
-          )}
         </TouchableOpacity>
 
         {/* Tab 2: Bill */}
         <TouchableOpacity
           style={styles.tab}
+          onLayout={(e) => handleTabLayout('bill', e.nativeEvent.layout)}
           onPress={() => onNavigate('bill')}
           accessibilityRole="tab"
           accessibilityLabel="Bill"
@@ -82,9 +215,6 @@ export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
               strokeLinecap="round"
             />
           </Svg>
-          {activeRoute === 'bill' && (
-            <View style={[styles.activeDot, { backgroundColor: theme.brand }]} />
-          )}
         </TouchableOpacity>
 
         {/* Center Tab: Permanent Message / Chat Bubble Icon */}
@@ -120,9 +250,10 @@ export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Tab 4: Smart Plugs (Impeccable SVG Craftsmanship) */}
+        {/* Tab 4: Smart Plugs / Appliances */}
         <TouchableOpacity
           style={styles.tab}
+          onLayout={(e) => handleTabLayout('plugs', e.nativeEvent.layout)}
           onPress={() => onNavigate('plugs')}
           accessibilityRole="tab"
           accessibilityLabel="Smart Plugs"
@@ -166,14 +297,12 @@ export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
               fill={activeRoute === 'plugs' ? theme.brand : theme.muted}
             />
           </Svg>
-          {activeRoute === 'plugs' && (
-            <View style={[styles.activeDot, { backgroundColor: theme.brand }]} />
-          )}
         </TouchableOpacity>
 
         {/* Tab 5: Profile */}
         <TouchableOpacity
           style={styles.tab}
+          onLayout={(e) => handleTabLayout('profile', e.nativeEvent.layout)}
           onPress={() => onNavigate('profile')}
           accessibilityRole="tab"
           accessibilityLabel="Profile"
@@ -195,9 +324,6 @@ export const FloatingPillNav: React.FC<FloatingPillNavProps> = ({
               strokeWidth="2.2"
             />
           </Svg>
-          {activeRoute === 'profile' && (
-            <View style={[styles.activeDot, { backgroundColor: theme.brand }]} />
-          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -214,6 +340,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   pillContainer: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
@@ -227,6 +354,14 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
+  fluidIndicator: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   tab: {
     flex: 1,
     height: 48,
@@ -234,17 +369,13 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 3,
+    zIndex: 2,
   },
   centerTabWrapper: {
     width: 62,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 3,
   },
   centerButton: {
     width: 56,

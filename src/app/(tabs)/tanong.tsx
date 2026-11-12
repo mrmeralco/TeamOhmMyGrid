@@ -9,10 +9,24 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withTiming,
+  interpolateColor,
+  runOnJS,
+  Easing,
+  FadeIn,
+  LinearTransition,
+} from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { TipiMascot } from '../../components/TipiMascot';
@@ -22,6 +36,15 @@ import { usePushToTalk } from '../../hooks/usePushToTalk';
 import { processTextQuery, processVoiceQuery } from '../../lib/geminiService';
 import { speakResponse } from '../../lib/audioService';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Animation & interaction phases
+type MicPhase =
+  | 'idle'         // default: normal size, brand color
+  | 'recording'    // enlarged, steady orange-red glow (no pulsing)
+  | 'pouring'      // ring shrinks, orange-red shape flows from input box into chat
+  | 'thinking';    // fluid wash dissolves into chat bubble while AI thinks
+
 const SUGGESTION_CHIPS = [
   'Bakit lumobo ang Aircon ko?',
   'Himayin ang Bill 📋',
@@ -29,6 +52,345 @@ const SUGGESTION_CHIPS = [
   'Peak Hours Alert?',
 ];
 
+// Vibrant orange-red palette
+const ORANGE_RED_GLOW = '#FF3B1D';
+const ORANGE_RED_FILL = '#FF4D26';
+
+// ─────────────────────────────────────────────────────────────
+//  Animated Mic Button (Enlarges steadily on hold, shrinks on release - NO pulsing)
+// ─────────────────────────────────────────────────────────────
+function AnimatedMicButton({
+  phase,
+  onPressIn,
+  onPressOut,
+  secondsLeft,
+  theme,
+  fontScale,
+}: {
+  phase: MicPhase;
+  onPressIn: () => void;
+  onPressOut: () => void;
+  secondsLeft: number;
+  theme: any;
+  fontScale: number;
+}) {
+  const isRecording = phase === 'recording';
+
+  const btnScale = useSharedValue(1);
+  const ringScale = useSharedValue(1);
+  const ringOpacity = useSharedValue(0);
+  const colorProgress = useSharedValue(0);
+
+  useEffect(() => {
+    if (phase === 'recording') {
+      // Enlarge steadily without pulsing or oscillating
+      btnScale.value = withSpring(1.32, { damping: 14, stiffness: 200 });
+      ringScale.value = withSpring(1.68, { damping: 14, stiffness: 200 });
+      ringOpacity.value = withTiming(0.45, { duration: 200 });
+      colorProgress.value = withTiming(1, { duration: 200 });
+    } else {
+      // Immediately shrink back to small resting size on release
+      btnScale.value = withSpring(1, { damping: 15, stiffness: 220 });
+      ringScale.value = withTiming(1, { duration: 180 });
+      ringOpacity.value = withTiming(0, { duration: 180 });
+      colorProgress.value = withTiming(0, { duration: 200 });
+    }
+  }, [phase, btnScale, colorProgress, ringOpacity, ringScale]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ringScale.value }],
+    opacity: ringOpacity.value,
+    backgroundColor: interpolateColor(
+      colorProgress.value,
+      [0, 1],
+      [`${theme.brand}30`, `${ORANGE_RED_GLOW}55`]
+    ),
+  }));
+
+  const btnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: btnScale.value }],
+    backgroundColor: interpolateColor(
+      colorProgress.value,
+      [0, 1],
+      [theme.brand, ORANGE_RED_GLOW]
+    ),
+  }));
+
+  return (
+    <View style={styles.micWrapper}>
+      {/* Steady glow ring (non-pulsing) */}
+      <Animated.View style={[styles.micRing, ringStyle]} pointerEvents="none" />
+
+      {/* Push-to-talk pressable mic */}
+      <Pressable
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel="Push to talk kay Tipi"
+      >
+        <Animated.View style={[styles.capsuleMicBtn, btnStyle]}>
+          {isRecording ? (
+            <Text style={[styles.micTimerText, { color: '#ffffff', fontSize: 13 * fontScale }]}>
+              {secondsLeft}s
+            </Text>
+          ) : (
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+              <Rect
+                x="9"
+                y="3"
+                width="6"
+                height="11"
+                rx="3"
+                stroke="#ffffff"
+                strokeWidth="2.2"
+              />
+              <Path
+                d="M5 10C5 13.866 8.13401 17 12 17C15.866 17 19 13.866 19 10"
+                stroke="#ffffff"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+              <Path
+                d="M12 17V21M8 21H16"
+                stroke="#ffffff"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            </Svg>
+          )}
+        </Animated.View>
+      </Pressable>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Morphing Fluid Shape
+//  Starts as a circular droplet right at the mic button (bottom: 92, right: 16),
+//  smoothly stretches, pulls, and morphs into the chat box shape with ease-out.
+//  DOES NOT FADE OUT: travels and fits directly and seamlessly into place!
+// ─────────────────────────────────────────────────────────────
+function MorphingFluidShape({
+  active,
+  targetDistance,
+  targetWidth: measuredTargetWidth,
+  targetHeight: measuredTargetHeight,
+  spokenText,
+  fontScale,
+  onDone,
+}: {
+  active: boolean;
+  targetDistance: number;
+  targetWidth?: number;
+  targetHeight?: number;
+  spokenText?: string;
+  fontScale: number;
+  onDone: () => void;
+}) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    if (active) {
+      progress.value = 0;
+      progress.value = withTiming(
+        1,
+        {
+          duration: 1080, // .4s faster for snappy yet fluid stretch and pull
+          easing: Easing.out(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) {
+            runOnJS(onDone)();
+          }
+        }
+      );
+    } else {
+      progress.value = 0;
+    }
+  }, [active, onDone, progress]);
+
+  // Use the exact measured dimensions of the bubble if available, or fall back to estimate
+  const resolvedTargetWidth =
+    measuredTargetWidth && measuredTargetWidth > 50
+      ? measuredTargetWidth
+      : Math.min(SCREEN_WIDTH * 0.82, Math.max(180, (spokenText?.length || 32) * 8.2 + 36));
+  const resolvedTargetHeight =
+    measuredTargetHeight && measuredTargetHeight > 30 ? measuredTargetHeight : 48;
+  const initialCircleSize = 44;
+
+  const animatedContainerStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+
+    // ── Dynamic Stretch & Pull Physics ──
+    // Phase 1 (p: 0 -> 0.28): Elastic stretch/pull upward.
+    // The circle elongates vertically (scaleY up to 1.35) and pinches horizontally (scaleX down to 0.78).
+    // Phase 2 (p: 0.28 -> 0.72): The stretch recoils and energy transfers laterally,
+    // blooming outward as the width expands into the speech bubble.
+    // Phase 3 (p: 0.72 -> 1.0): Scales settle cleanly back to 1.0 as it eases into docking.
+    let stretchY = 1;
+    let stretchX = 1;
+
+    if (p < 0.28) {
+      const pullT = p / 0.28;
+      const curve = Math.sin(pullT * (Math.PI / 2));
+      stretchY = 1 + 0.35 * curve;
+      stretchX = 1 - 0.22 * curve;
+    } else if (p < 0.72) {
+      const releaseT = (p - 0.28) / 0.44;
+      const curve = Math.sin(releaseT * (Math.PI / 2));
+      stretchY = 1.35 - 0.35 * curve;
+      stretchX = 0.78 + 0.22 * curve;
+    } else {
+      stretchY = 1;
+      stretchX = 1;
+    }
+
+    // Width expands with an S-curve, staying pulled and compact early on, then expanding broadly
+    const widthProgress = p < 0.22 ? 0 : Math.min(1, (p - 0.22) / 0.58);
+    const widthT = widthProgress * widthProgress * (3 - 2 * widthProgress);
+    const width = initialCircleSize + (resolvedTargetWidth - initialCircleSize) * widthT;
+    const height = initialCircleSize + (resolvedTargetHeight - initialCircleSize) * widthT;
+
+    // Morph corner radiuses:
+    // Starts as perfect circle (22px all corners)
+    // Morphs into chat bubble: top-left: 16, top-right: 16, bottom-left: 16, bottom-right: 4 (talk tail!)
+    const radiusProgress = p < 0.28 ? 0 : Math.min(1, (p - 0.28) / 0.54);
+    const topLeftRadius = 22 - 6 * radiusProgress;
+    const topRightRadius = 22 - 6 * radiusProgress;
+    const bottomLeftRadius = 22 - 6 * radiusProgress;
+    const bottomRightRadius = 22 - 18 * radiusProgress;
+
+    // Lifts vertically by the exact target distance to meet the chat bubble
+    const translateY = -targetDistance * p;
+
+    // Solid opacity throughout - DOES NOT FADE OUT: stretches directly into place
+    return {
+      width,
+      height,
+      borderTopLeftRadius: topLeftRadius,
+      borderTopRightRadius: topRightRadius,
+      borderBottomLeftRadius: bottomLeftRadius,
+      borderBottomRightRadius: bottomRightRadius,
+      transform: [
+        { translateY },
+        { scaleY: stretchY },
+        { scaleX: stretchX },
+      ],
+      opacity: 1,
+    };
+  });
+
+  const animatedTextStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    // Spoken text reveals smoothly as the stretch unfolds into the broad chat bubble
+    const textOpacity = p < 0.32 ? 0 : Math.min(1, (p - 0.32) / 0.35);
+    return {
+      opacity: textOpacity,
+    };
+  });
+
+  if (!active) return null;
+
+  return (
+    <Animated.View
+      style={[styles.morphingFluidShape, animatedContainerStyle]}
+      pointerEvents="none"
+    >
+      {spokenText ? (
+        <Animated.View style={[styles.morphingTextWrapper, animatedTextStyle]}>
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.morphingText,
+              { fontSize: 14 * fontScale },
+            ]}
+          >
+            {spokenText}
+          </Text>
+        </Animated.View>
+      ) : null}
+    </Animated.View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  User Chat Bubble with Fading Orange-Red Fluid Wash
+// ─────────────────────────────────────────────────────────────
+function UserMessageBubble({
+  text,
+  isLatestVoice,
+  pourActive,
+  theme,
+  fontScale,
+  onBubbleLayout,
+}: {
+  text: string;
+  isLatestVoice: boolean;
+  pourActive: boolean;
+  theme: any;
+  fontScale: number;
+  onBubbleLayout?: (layout: { width: number; height: number; y: number }) => void;
+}) {
+  const tintOpacity = useSharedValue(isLatestVoice ? 1 : 0);
+
+  useEffect(() => {
+    if (isLatestVoice && !pourActive) {
+      // The morphing shape has landed! Start dissolving the orange-red fluid wash into theme.brand over 1.4s
+      tintOpacity.value = 1;
+      tintOpacity.value = withTiming(0, { duration: 1400, easing: Easing.out(Easing.cubic) });
+    }
+  }, [isLatestVoice, pourActive, tintOpacity]);
+
+  const tintStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
+    backgroundColor: ORANGE_RED_FILL,
+    opacity: tintOpacity.value,
+  }));
+
+  // While pourActive is true, hide this bubble so only the morphing shape is visible stretching and flying
+  const isHiddenDuringPour = isLatestVoice && pourActive;
+
+  return (
+    <View
+      onLayout={(e) => {
+        if (isLatestVoice && onBubbleLayout) {
+          const { width, height, y } = e.nativeEvent.layout;
+          onBubbleLayout({ width, height, y });
+        }
+      }}
+      style={[
+        styles.bubble,
+        styles.userBubble,
+        {
+          backgroundColor: theme.brand,
+          overflow: 'hidden',
+          opacity: isHiddenDuringPour ? 0 : 1,
+        },
+      ]}
+    >
+      {/* Orange-red fluid wash that slowly fades into the background */}
+      <Animated.View style={tintStyle} pointerEvents="none" />
+      <Text
+        style={[
+          styles.bubbleText,
+          { color: theme.brandInk, fontSize: 14 * fontScale },
+        ]}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MAIN SCREEN: Tanong kay Tipi
+// ─────────────────────────────────────────────────────────────
 export default function TanongScreen() {
   const { theme, fontScale } = useTheme();
   const {
@@ -44,25 +406,226 @@ export default function TanongScreen() {
   const [inputQuery, setInputQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
+  const [micPhase, setMicPhase] = useState<MicPhase>('idle');
+  const [pourActive, setPourActive] = useState(false);
+  const [pourTargetDistance, setPourTargetDistance] = useState<number>(120);
+  const [pourTargetWidth, setPourTargetWidth] = useState<number>(0);
+  const [pourTargetHeight, setPourTargetHeight] = useState<number>(0);
+  const [pourSpeechText, setPourSpeechText] = useState('');
+  const [latestVoiceIndex, setLatestVoiceIndex] = useState<number | null>(null);
+
+  const handleBubbleLayout = useCallback((layout: { width: number; height: number; y: number }) => {
+    if (layout.width > 0 && layout.height > 0) {
+      setPourTargetWidth(layout.width);
+      setPourTargetHeight(layout.height);
+    }
+  }, []);
+
   const scrollViewRef = useRef<any>(null);
+  const scrollViewHeightRef = useRef<number>(520);
+  const contentHeightRef = useRef<number>(110);
+  const liveTranscriptTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { isRecording, secondsLeft, startRecording } = usePushToTalk();
+  const { isRecording, secondsLeft, startRecording, stopRecording } = usePushToTalk();
 
+  // Word-by-word streaming transcript simulation directly into the input/typing box
+  const SAMPLE_TRANSCRIPT_WORDS = [
+    'Bakit',
+    'lumobo',
+    'ang',
+    'singil',
+    'sa',
+    'kuryente',
+    'ko',
+    'ngayong',
+    'linggo?',
+  ];
+
+  const startStreamingTranscript = () => {
+    setInputQuery('');
+    let idx = 0;
+    liveTranscriptTimer.current = setInterval(() => {
+      if (idx < SAMPLE_TRANSCRIPT_WORDS.length) {
+        setInputQuery((prev) => (prev ? prev + ' ' : '') + SAMPLE_TRANSCRIPT_WORDS[idx]);
+        idx++;
+      }
+    }, 220);
+  };
+
+  const stopStreamingTranscript = () => {
+    if (liveTranscriptTimer.current) {
+      clearInterval(liveTranscriptTimer.current);
+      liveTranscriptTimer.current = null;
+    }
+  };
+
+  // ── Calculate dynamic distance from mic button to where the chat message lands ──
+  const calculateTargetDistance = useCallback(() => {
+    const viewportH = scrollViewHeightRef.current || 520;
+    const contentH = contentHeightRef.current || 110;
+    const userChatsCount = chatHistory.filter((m) => m.sender === 'user').length;
+    const isInitialEmpty = userChatsCount === 0;
+
+    // Offset from capsule bottom (bottom: 92) to ScrollView bottom (chipsRow top):
+    // bottom spacer (80) + inputBar (69) + chipsRow (44) = 193.
+    // 193 - 92 = 101px.
+    const capsuleToScrollBottom = 101;
+
+    if (isInitialEmpty) {
+      // When there are no previous chats and it is empty:
+      // The new message lands near the top of the ScrollView right below Tipi's greeting.
+      // If chatHistory is completely empty: ~64px from top.
+      // If Tipi's initial greeting is present: exact bottom of user bubble is at ~184-188px.
+      const messageBottomFromTop =
+        chatHistory.length === 0 ? 64 : Math.max(184, contentH + 54);
+      const distance = capsuleToScrollBottom + (viewportH - messageBottomFromTop);
+      return Math.max(70, distance);
+    } else {
+      // When there are previous chats:
+      // It shouldn't go as high! The message sits at the bottom of the ScrollView.
+      if (contentH + 80 >= viewportH) {
+        // Content fills viewport or scrolls: bottom bubble sits 16px above ScrollView bottom
+        return capsuleToScrollBottom + 16; // ~117px
+      } else {
+        // Partially filled chat history: lands directly below existing messages
+        const messageBottomFromTop = contentH + 50;
+        const distance = capsuleToScrollBottom + (viewportH - messageBottomFromTop);
+        return Math.max(capsuleToScrollBottom + 16, Math.min(280, distance));
+      }
+    }
+  }, [chatHistory]);
+
+  // ── Push-To-Talk: Held (Press In) ──
+  const handlePressIn = useCallback(() => {
+    if (loading) return;
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+
+    setMicPhase('recording');
+    startStreamingTranscript();
+
+    // Start audio recorder
+    startRecording((base64Audio) => {
+      if (base64Audio) {
+        // captured audio handled in handlePressOut
+      }
+    });
+  }, [loading, startRecording]);
+
+  // ── Push-To-Talk: Released (Press Out) ──
+  const handlePressOut = useCallback(async () => {
+    if (micPhase !== 'recording') return;
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {}
+
+    stopStreamingTranscript();
+
+    // Grab the speech text that was generated in the input box
+    const finalSpeechText =
+      inputQuery.trim() || 'Bakit lumobo ang singil sa kuryente ko ngayong linggo?';
+
+    setPourSpeechText(finalSpeechText);
+
+    // Calculate exact travel distance based on current chat occupancy
+    const dynamicDistance = calculateTargetDistance();
+    setPourTargetDistance(dynamicDistance);
+
+    // Clear input box so the shape and text smoothly lift/flow into the chat
+    setInputQuery('');
+    setMicPhase('pouring');
+    setPourActive(true);
+
+    const capturedAudioBase64 = await stopRecording();
+
+    // Commit user message to chat history
+    addChatMessage('user', finalSpeechText);
+    setLatestVoiceIndex(chatHistory.length);
+
+    // When chats are filled, automatically scroll a bit BEFORE the message reaches the chat space.
+    // Since loading is false, it scrolls strictly to the user's message without overshooting!
+    const userChatsCount = chatHistory.filter((m) => m.sender === 'user').length;
+    if (userChatsCount > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    }
+
+    // Start API query in background
+    const queryPromise = capturedAudioBase64
+      ? processVoiceQuery(capturedAudioBase64, { totalKwh: currentKwh, budget, projected })
+      : processTextQuery(finalSpeechText, { totalKwh: currentKwh, budget, projected });
+
+    // AI thinking & vocalized response
+    try {
+      // 1. Wait until user's message is successfully docked in the chat (1080ms morph duration)
+      await new Promise((resolve) => setTimeout(resolve, 1080));
+
+      // 2. NOW pop up the AI thinking message after the message is successfully in the chat
+      setLoading(true);
+      setMicPhase('thinking');
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 80);
+
+      // 3. Keep the thinking message visible for a significant 1-second delay
+      const thinkingDelay = new Promise((resolve) => setTimeout(resolve, 1000));
+      const [response] = await Promise.all([queryPromise, thinkingDelay]);
+
+      addChatMessage('tipi', response);
+      setIsTalking(true);
+      await speakResponse(response);
+      setTimeout(() => setIsTalking(false), 4000);
+    } catch {
+      addChatMessage('tipi', 'Paumanhin, nagkaroon ng aberya sa pagsusuri ng iyong tanong.');
+    } finally {
+      setLoading(false);
+      setMicPhase('idle');
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    }
+  }, [
+    micPhase,
+    inputQuery,
+    calculateTargetDistance,
+    stopRecording,
+    addChatMessage,
+    chatHistory.length,
+    currentKwh,
+    budget,
+    projected,
+  ]);
+
+  const handlePourDone = useCallback(() => {
+    setPourActive(false);
+  }, []);
+
+  // ── Standard Text Send ──
   const handleSendText = async (textToSend?: string) => {
     const query = (textToSend || inputQuery).trim();
     if (!query || loading) return;
 
     setInputQuery('');
+    setLatestVoiceIndex(null);
     addChatMessage('user', query);
-    setLoading(true);
+
+    // Briefly let the user message mount in the chat before popping up the thinking spinner
+    setTimeout(() => {
+      setLoading(true);
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 120);
 
     try {
-      // STRICT CONSTRAINT: Silent text processing - ZERO vocalization
-      const response = await processTextQuery(query, {
-        totalKwh: currentKwh,
-        budget,
-        projected,
-      });
+      // 1.0s significant thinking delay after prompt
+      const minThinkingDelay = new Promise((resolve) => setTimeout(resolve, 1000));
+      const [response] = await Promise.all([
+        processTextQuery(query, { totalKwh: currentKwh, budget, projected }),
+        minThinkingDelay,
+      ]);
       addChatMessage('tipi', response);
     } catch {
       addChatMessage('tipi', 'Pasensya na, nagkaroon ng aberya. Pakisubukan muli.');
@@ -72,57 +635,31 @@ export default function TanongScreen() {
     }
   };
 
-  const handleStartPushToTalk = useCallback(async () => {
-    if (isRecording || loading) return;
-
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      // non-blocking
+  // ── Central Navigation Mic Trigger (Sync) ──
+  const handleNavMicTrigger = useCallback(() => {
+    if (micPhase === 'recording') {
+      handlePressOut();
+    } else {
+      handlePressIn();
     }
+  }, [micPhase, handlePressIn, handlePressOut]);
 
-    startRecording(async (base64Audio) => {
-      if (!base64Audio) {
-        addChatMessage('tipi', 'Hindi narinig ang boses. Pakisubukan muli.');
-        return;
-      }
-
-      setLoading(true);
-      addChatMessage('user', '🎙️ [Boses na Tanong kay Tipi]');
-
-      try {
-        const response = await processVoiceQuery(base64Audio, {
-          totalKwh: currentKwh,
-          budget,
-          projected,
-        });
-
-        addChatMessage('tipi', response);
-        // STRICT CONSTRAINT: Vocalize ONLY on voice queries
-        setIsTalking(true);
-        await speakResponse(response);
-        setTimeout(() => setIsTalking(false), 4000);
-      } catch {
-        addChatMessage('tipi', 'Paumanhin, hindi naproseso ang iyong boses.');
-      } finally {
-        setLoading(false);
-        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-      }
-    });
-  }, [isRecording, loading, startRecording, currentKwh, budget, projected, addChatMessage]);
-
-  // Connect central bottom nav mic button to push-to-talk
   useEffect(() => {
-    registerVoiceTrigger(handleStartPushToTalk);
+    registerVoiceTrigger(handleNavMicTrigger);
     return () => {
       registerVoiceTrigger(null);
     };
-  }, [handleStartPushToTalk, registerVoiceTrigger]);
+  }, [handleNavMicTrigger, registerVoiceTrigger]);
 
-  // Sync recording status and timer to bottom nav mic button
   useEffect(() => {
     setVoiceRecordingState(isRecording, secondsLeft);
   }, [isRecording, secondsLeft, setVoiceRecordingState]);
+
+  useEffect(() => {
+    return () => {
+      stopStreamingTranscript();
+    };
+  }, []);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
@@ -130,7 +667,7 @@ export default function TanongScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
-        {/* Header with Mascot */}
+        {/* Header */}
         <View style={[styles.header, { borderBottomColor: theme.line }]}>
           <TipiMascot isTalking={isTalking} size="mini" />
           <View style={styles.headerInfo}>
@@ -138,11 +675,13 @@ export default function TanongScreen() {
               Tanong kay Tipi
             </Text>
             <Text style={[styles.headerSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
-              {isRecording
-                ? `🔴 Nakikinig... ${secondsLeft}s`
+              {micPhase === 'recording'
+                ? '🔴 Nakikinig si Tipi... bitawan kapag tapos na'
+                : micPhase === 'thinking'
+                ? '⏳ Iniisip ni Tipi ang sagot...'
                 : isTalking
-                ? 'Nagsasalita si Tipi...'
-                : 'Magsalita sa mic o mag-type ng tanong'}
+                ? '🔊 Nagsasalita si Tipi...'
+                : 'Pindutin at hawakan ang mic para magsalita'}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -154,55 +693,88 @@ export default function TanongScreen() {
         {/* Chat History Transcript */}
         <ScrollView
           ref={scrollViewRef}
+          style={{ flex: 1 }}
           contentContainerStyle={styles.chatScroll}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          onLayout={(e) => {
+            scrollViewHeightRef.current = e.nativeEvent.layout.height;
+          }}
+          onContentSizeChange={(_w, h) => {
+            contentHeightRef.current = h;
+          }}
           showsVerticalScrollIndicator={false}
         >
           {chatHistory.map((item, index) => {
             const isUser = item.sender === 'user';
+            const isLatestVoice = isUser && index === latestVoiceIndex;
+
             return (
-              <View
+              <Animated.View
                 key={index}
-                style={[
-                  styles.messageRow,
-                  isUser ? styles.userRow : styles.tipiRow,
-                ]}
+                entering={FadeIn.duration(280)}
+                layout={LinearTransition.springify().damping(18)}
+                style={[styles.messageRow, isUser ? styles.userRow : styles.tipiRow]}
               >
                 {!isUser && (
                   <View style={styles.botAvatarWrapper}>
                     <TipiMascot size="mini" isTalking={false} />
                   </View>
                 )}
-                <View
-                  style={[
-                    styles.bubble,
-                    isUser
-                      ? [styles.userBubble, { backgroundColor: theme.brand }]
-                      : [styles.tipiBubble, { backgroundColor: theme.cont, borderColor: theme.line }],
-                  ]}
-                >
-                  <Text
+
+                {isUser ? (
+                  <UserMessageBubble
+                    text={item.text}
+                    isLatestVoice={isLatestVoice}
+                    pourActive={pourActive}
+                    theme={theme}
+                    fontScale={fontScale}
+                    onBubbleLayout={handleBubbleLayout}
+                  />
+                ) : (
+                  <View
                     style={[
-                      styles.bubbleText,
-                      {
-                        color: isUser ? theme.brandInk : theme.ink,
-                        fontSize: 14 * fontScale,
-                      },
+                      styles.bubble,
+                      styles.tipiBubble,
+                      { backgroundColor: theme.cont, borderColor: theme.line },
                     ]}
                   >
-                    {item.text}
-                  </Text>
-                </View>
-              </View>
+                    <Text
+                      style={[
+                        styles.bubbleText,
+                        { color: theme.ink, fontSize: 14 * fontScale },
+                      ]}
+                    >
+                      {item.text}
+                    </Text>
+                  </View>
+                )}
+              </Animated.View>
             );
           })}
 
+          {/* AI Thinking Spinner */}
           {loading && (
-            <View style={[styles.messageRow, styles.tipiRow]}>
-              <View style={[styles.bubble, styles.tipiBubble, { backgroundColor: theme.cont }]}>
-                <ActivityIndicator size="small" color={theme.brand} />
+            <Animated.View
+              entering={FadeIn.duration(220)}
+              style={[styles.messageRow, styles.tipiRow]}
+            >
+              <View style={styles.botAvatarWrapper}>
+                <TipiMascot size="mini" isTalking={false} />
               </View>
-            </View>
+              <View
+                style={[
+                  styles.bubble,
+                  styles.tipiBubble,
+                  { backgroundColor: theme.cont, borderColor: theme.line },
+                ]}
+              >
+                <View style={styles.thinkingRow}>
+                  <ActivityIndicator size="small" color={theme.brand} />
+                  <Text style={[styles.thinkingText, { color: theme.muted, fontSize: 12 * fontScale }]}>
+                    Inaanalisa ang iyong kuryente...
+                  </Text>
+                </View>
+              </View>
+            </Animated.View>
           )}
         </ScrollView>
 
@@ -223,92 +795,55 @@ export default function TanongScreen() {
           </ScrollView>
         </View>
 
-        {/* Google-Style Chat Input Bar with Orange Mic docked on the rightmost inside */}
+        {/* Chat Input Bar */}
         <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.line }]}>
           <View
             style={[
               styles.inputCapsule,
               {
-                backgroundColor: theme.bg,
-                borderColor: isRecording ? theme.brand : theme.line,
+                backgroundColor: micPhase === 'recording' ? `${ORANGE_RED_GLOW}14` : theme.bg,
+                borderColor: micPhase === 'recording' ? ORANGE_RED_GLOW : theme.line,
               },
             ]}
           >
+            {/* Real-time speech-to-text appears right inside this typing box */}
             <TextInput
               style={[
                 styles.textInput,
                 {
-                  color: theme.ink,
+                  color: micPhase === 'recording' ? ORANGE_RED_GLOW : theme.ink,
                   fontSize: 14 * fontScale,
+                  fontWeight: micPhase === 'recording' ? '600' : '400',
                 },
               ]}
-              placeholder="Mag-type ng tanong o magsalita..."
-              placeholderTextColor={theme.muted}
+              placeholder={
+                micPhase === 'recording'
+                  ? 'Nakikinig si Tipi... magsalita ka na'
+                  : 'Mag-type o hawakan ang mic...'
+              }
+              placeholderTextColor={micPhase === 'recording' ? ORANGE_RED_GLOW : theme.muted}
               value={inputQuery}
               onChangeText={setInputQuery}
               onSubmitEditing={() => handleSendText()}
               returnKeyType="send"
+              editable={micPhase !== 'recording'}
             />
 
-            {/* Google-Style Orange Mic Icon at Rightmost Side */}
-            <TouchableOpacity
-              style={[
-                styles.capsuleMicBtn,
-                {
-                  backgroundColor: isRecording ? theme.danger : theme.brand,
-                },
-              ]}
-              onPress={handleStartPushToTalk}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isRecording
-                  ? `Nakikinig si Tipi (${secondsLeft}s)`
-                  : 'Magsalita kay Tipi gamit ang boses'
-              }
-              activeOpacity={0.8}
-            >
-              {isRecording ? (
-                <Text style={[styles.micTimerText, { color: theme.brandInk, fontSize: 13 * fontScale }]}>
-                  {secondsLeft}s
-                </Text>
-              ) : (
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                  <Rect
-                    x="9"
-                    y="3"
-                    width="6"
-                    height="11"
-                    rx="3"
-                    stroke={theme.brandInk}
-                    strokeWidth="2.2"
-                  />
-                  <Path
-                    d="M5 10C5 13.866 8.13401 17 12 17C15.866 17 19 13.866 19 10"
-                    stroke={theme.brandInk}
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                  />
-                  <Path
-                    d="M12 17V21M8 21H16"
-                    stroke={theme.brandInk}
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                  />
-                </Svg>
-              )}
-            </TouchableOpacity>
+            {/* Mic Button: Enlarges steadily on hold, shrinks on release */}
+            <AnimatedMicButton
+              phase={micPhase}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+              secondsLeft={secondsLeft}
+              theme={theme}
+              fontScale={fontScale}
+            />
           </View>
 
-          {/* Send Button when text is present */}
-          {inputQuery.trim().length > 0 && (
+          {/* Send Button when text is typed manually */}
+          {inputQuery.trim().length > 0 && micPhase !== 'recording' && (
             <TouchableOpacity
-              style={[
-                styles.sendBtn,
-                {
-                  backgroundColor: theme.brand,
-                  opacity: loading ? 0.6 : 1,
-                },
-              ]}
+              style={[styles.sendBtn, { backgroundColor: theme.brand, opacity: loading ? 0.6 : 1 }]}
               onPress={() => handleSendText()}
               disabled={loading}
               accessibilityRole="button"
@@ -321,15 +856,33 @@ export default function TanongScreen() {
           )}
         </View>
 
+        {/* Morphing Fluid Shape: Dynamically travels from mic button all the way to where the message stays */}
+        <MorphingFluidShape
+          active={pourActive}
+          targetDistance={pourTargetDistance}
+          targetWidth={pourTargetWidth}
+          targetHeight={pourTargetHeight}
+          spokenText={pourSpeechText}
+          fontScale={fontScale}
+          onDone={handlePourDone}
+        />
+
         <View style={{ height: 80 }} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Styles
+// ─────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+    position: 'relative',
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -341,6 +894,7 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   headerTitle: { fontWeight: '800' },
   headerSub: { fontWeight: '600', marginTop: 2 },
+
   chatScroll: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -351,13 +905,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginVertical: 4,
   },
-  userRow: {
-    justifyContent: 'flex-end',
-  },
-  tipiRow: {
-    justifyContent: 'flex-start',
-    gap: 8,
-  },
+  userRow: { justifyContent: 'flex-end' },
+  tipiRow: { justifyContent: 'flex-start', gap: 8 },
   botAvatarWrapper: {
     width: 32,
     height: 32,
@@ -371,21 +920,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  userBubble: {
-    borderBottomRightRadius: 4,
+  userBubble: { borderBottomRightRadius: 4 },
+  tipiBubble: { borderBottomLeftRadius: 4, borderWidth: 1 },
+  bubbleText: { lineHeight: 20, fontWeight: '500' },
+
+  // Thinking state
+  thinkingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  tipiBubble: {
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
+  thinkingText: {
+    fontWeight: '600',
   },
-  bubbleText: {
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  chipsRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
+
+  chipsRow: { paddingHorizontal: 12, paddingVertical: 6 },
   chip: {
     borderWidth: 1,
     borderRadius: 16,
@@ -393,9 +942,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginRight: 8,
   },
-  chipText: {
-    fontWeight: '600',
-  },
+  chipText: { fontWeight: '600' },
+
+  // Input bar
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -419,17 +968,30 @@ const styles = StyleSheet.create({
     height: '100%',
     paddingVertical: 0,
   },
+
+  // Mic Button
+  micWrapper: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  micRing: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
   capsuleMicBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 6,
   },
-  micTimerText: {
-    fontWeight: '900',
-  },
+  micTimerText: { fontWeight: '900' },
+
   sendBtn: {
     width: 44,
     height: 44,
@@ -437,7 +999,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendBtnText: {
-    fontWeight: '800',
+  sendBtnText: { fontWeight: '800' },
+
+  // Morphing Fluid Shape:
+  // Starts as a 44x44 circular droplet positioned right over the mic button (bottom: 92, right: 16)
+  // and morphs into a chat bubble as it travels upward with ease-out
+  morphingFluidShape: {
+    position: 'absolute',
+    right: 16,
+    bottom: 92,
+    backgroundColor: ORANGE_RED_FILL,
+    shadowColor: ORANGE_RED_GLOW,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 35,
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    overflow: 'hidden',
+  },
+  morphingTextWrapper: {
+    width: '100%',
+    justifyContent: 'center',
+  },
+  morphingText: {
+    color: '#ffffff',
+    fontWeight: '500',
+    lineHeight: 20,
   },
 });

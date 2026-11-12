@@ -12,11 +12,10 @@ import { useTheme } from '../../context/ThemeContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BudgetGauge } from '../../components/BudgetGauge';
 import { TipiMascot } from '../../components/TipiMascot';
-import { ApplianceBreakdownCard } from '../../components/ApplianceBreakdownCard';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { calculateTierCliff } from '../../lib/tariffEngine';
-import { MOCK_APPLIANCES, MOCK_USER } from '../../constants/mockData';
+import { MOCK_USER } from '../../constants/mockData';
 
 export default function HomeScreen() {
   const { theme, fontScale } = useTheme();
@@ -80,26 +79,6 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
-
-        {/* Primary CTA: What-If Watt-Calculator */}
-        <TouchableOpacity
-          style={[styles.primaryActionCard, { backgroundColor: theme.brand }]}
-          onPress={() => router.push('/whatif')}
-          accessibilityRole="button"
-          accessibilityLabel="Buksan ang What-If Watt Calculator"
-        >
-          <View style={styles.actionCardContent}>
-            <Text style={[styles.actionCardTitle, { color: theme.brandInk, fontSize: 18 * fontScale }]}>
-              What-If Watt-Calculator 💡
-            </Text>
-            <Text style={[styles.actionCardSub, { color: theme.brandInk, fontSize: 13 * fontScale }]}>
-              Tingnan ang matitipid sa pag-adjust ng aircon at appliances.
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* iPad Storage Style Scrollable Appliance Disaggregation Card */}
-        <ApplianceBreakdownCard appliances={MOCK_APPLIANCES} totalKwh={currentKwh} />
 
         {/* Quick Action: Scan Meralco Bill */}
         <TouchableOpacity
@@ -191,25 +170,6 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontWeight: '600',
-  },
-  primaryActionCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 6,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  actionCardContent: {
-    gap: 2,
-  },
-  actionCardTitle: {
-    fontWeight: '800',
-  },
-  actionCardSub: {
-    opacity: 0.95,
-    lineHeight: 18,
   },
   secondaryActionCard: {
     borderRadius: 16,
