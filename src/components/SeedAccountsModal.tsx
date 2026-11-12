@@ -59,6 +59,7 @@ export const SeedAccountsModal: React.FC<SeedAccountsModalProps> = ({
                     <Text style={styles.canBadgeText}>CAN: {item.can}</Text>
                   </View>
                 </View>
+                {!!item.email && <Text style={styles.emailText}>Email: {item.email}</Text>}
                 <Text style={styles.sinText}>SIN (on bill): {item.sin}</Text>
                 <Text style={styles.addressText}>{item.serviceAddress}</Text>
                 <View style={styles.tagRow}>
@@ -150,6 +151,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
+  },
+  emailText: {
+    fontSize: 12,
+    color: '#0284c7',
+    fontWeight: '600',
+    marginBottom: 2,
   },
   sinText: {
     fontSize: 12.5,

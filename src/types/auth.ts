@@ -8,6 +8,7 @@ export interface CustomerRecord {
   can: string;
   sin: string;
   accountHolderName: string;
+  email?: string;
   serviceAddress: string;
   rateClass: string;
   monthlyBudget: number;

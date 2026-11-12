@@ -41,6 +41,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567890',
     sin: '1234-5678-90',
     accountHolderName: 'Nena Villanueva',
+    email: 'nena.villanueva@gmail.com',
     serviceAddress: 'Block 14 Lot 8, Sampaguita St., Quezon City',
     rateClass: 'Residential',
     monthlyBudget: 3500.0,
@@ -52,6 +53,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567891',
     sin: '1234-5678-91',
     accountHolderName: 'Jaeda Marthena Iral',
+    email: 'jaeda.iral@teamohmygrid.ph',
     serviceAddress: 'Unit 402, Katipunan Ave., Loyola Heights, Quezon City',
     rateClass: 'Residential',
     monthlyBudget: 4200.0,
@@ -63,6 +65,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567892',
     sin: '1234-5678-92',
     accountHolderName: 'Carl Benedict Enriquez',
+    email: 'carl.enriquez@teamohmygrid.ph',
     serviceAddress: '15 Malakas St., Diliman, Quezon City',
     rateClass: 'Residential',
     monthlyBudget: 3800.0,
@@ -74,6 +77,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567893',
     sin: '1234-5678-93',
     accountHolderName: 'Jacob Antonio Uzel',
+    email: 'jacob.uzel@teamohmygrid.ph',
     serviceAddress: '88 Magsaysay Blvd., Santa Mesa, Manila',
     rateClass: 'Residential',
     monthlyBudget: 3000.0,
@@ -85,6 +89,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567894',
     sin: '1234-5678-94',
     accountHolderName: 'Hector Escobido',
+    email: 'hector.escobido@teamohmygrid.ph',
     serviceAddress: '23 Boni Serrano Ave., Cubao, Quezon City',
     rateClass: 'Residential',
     monthlyBudget: 4500.0,
@@ -96,6 +101,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567895',
     sin: '1234-5678-95',
     accountHolderName: 'Lenard Cato Narvaza',
+    email: 'lenard.narvaza@teamohmygrid.ph',
     serviceAddress: '45 West Avenue, Philam, Quezon City',
     rateClass: 'Residential',
     monthlyBudget: 3200.0,
@@ -107,6 +113,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '9876543210',
     sin: '9876-5432-10',
     accountHolderName: 'Juan Dela Cruz',
+    email: 'juan.delacruz@gmail.com',
     serviceAddress: '123 Rizal Ave., Caloocan City',
     rateClass: 'Residential',
     monthlyBudget: 2800.0,
@@ -118,6 +125,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1029384756',
     sin: '1029-3847-56',
     accountHolderName: 'Maria Santos',
+    email: 'maria.santos@gmail.com',
     serviceAddress: '77 Acacia St., Pasig City',
     rateClass: 'Residential',
     monthlyBudget: 5000.0,
@@ -150,7 +158,22 @@ async function getStoredCustomers(): Promise<CustomerRecord[]> {
       await AsyncStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(DEFAULT_CUSTOMER_RECORDS));
       return DEFAULT_CUSTOMER_RECORDS;
     }
-    return JSON.parse(json);
+    const parsed: CustomerRecord[] = JSON.parse(json);
+    let updated = false;
+    const merged = parsed.map((record) => {
+      if (!record.email) {
+        const seed = DEFAULT_CUSTOMER_RECORDS.find((d) => d.can === record.can);
+        if (seed?.email) {
+          updated = true;
+          return { ...record, email: seed.email };
+        }
+      }
+      return record;
+    });
+    if (updated) {
+      await AsyncStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(merged));
+    }
+    return merged;
   } catch {
     return DEFAULT_CUSTOMER_RECORDS;
   }
@@ -395,6 +418,181 @@ export async function verifyCANRecord(
 }
 
 // ==============================================================================
+// 1b. CAN Linking & Allocation for Email Address
+// Automatically discovers or assigns pre-registered Meralco CAN linked to user's email
+// ==============================================================================
+export async function getLinkedCANForEmail(
+  email: string,
+  fullName?: string,
+  preferredCAN?: string
+): Promise<{ can: string; customer: CustomerRecord }> {
+  const normEmail = email.trim().toLowerCase();
+
+  // If a valid preferred CAN was provided, attempt to verify and use it
+  if (preferredCAN) {
+    const cleanPreferred = cleanCAN(preferredCAN);
+    if (cleanPreferred.length === 10) {
+      const canCheck = await verifyCANRecord(cleanPreferred, fullName);
+      if (canCheck.valid && canCheck.customer) {
+        return { can: cleanPreferred, customer: canCheck.customer };
+      }
+    }
+  }
+
+  // 1. Live Supabase lookup / RPC if live Supabase is configured
+  if (isLiveSupabaseConfigured() && supabase) {
+    try {
+      const { data, error } = await supabase.rpc('get_meralco_customer_by_email', {
+        p_email: normEmail,
+        p_full_name: fullName?.trim() || null,
+      });
+
+      if (!error && data && data.found && data.can) {
+        return {
+          can: data.can,
+          customer: {
+            can: data.can,
+            sin: data.sin || formatCANDisplay(data.can),
+            accountHolderName: data.account_holder || fullName || 'Meralco Customer',
+            email: normEmail,
+            serviceAddress: data.service_address || 'Metro Manila',
+            rateClass: data.rate_class || 'Residential',
+            monthlyBudget: data.monthly_budget || 3500,
+            householdMembers: data.household_members || 5,
+            majorAppliances: data.major_appliances || ['Inverter AC (1.5 HP) x 2'],
+            isRegistered: false,
+          },
+        };
+      }
+    } catch (e) {
+      console.warn('Supabase RPC get_meralco_customer_by_email fallback:', e);
+    }
+
+    // Direct table query fallback in Supabase (if permitted by policy or service)
+    try {
+      const { data } = await supabase
+        .from('meralco_customers')
+        .select('*')
+        .ilike('email', normEmail)
+        .maybeSingle();
+
+      if (data && data.can) {
+        const canCheck = await verifyCANRecord(data.can, fullName);
+        if (canCheck.valid) {
+          return {
+            can: data.can,
+            customer: canCheck.customer || {
+              can: data.can,
+              sin: data.sin || formatCANDisplay(data.can),
+              accountHolderName: data.account_holder_name || fullName || 'Meralco Customer',
+              email: normEmail,
+              serviceAddress: data.service_address || 'Metro Manila',
+              rateClass: data.rate_class || 'Residential',
+              monthlyBudget: data.monthly_budget || 3500,
+              householdMembers: data.household_members || 5,
+              majorAppliances: data.major_appliances || ['Inverter AC (1.5 HP) x 2'],
+              isRegistered: false,
+            },
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Default Customer Records fallback for live Supabase
+    // Check if email matches any pre-registered default customer
+    const preRegistered = DEFAULT_CUSTOMER_RECORDS.find(
+      (c) => c.email?.toLowerCase() === normEmail
+    );
+    if (preRegistered) {
+      const canCheck = await verifyCANRecord(preRegistered.can, fullName);
+      if (canCheck.valid) {
+        return {
+          can: preRegistered.can,
+          customer: canCheck.customer || preRegistered,
+        };
+      }
+    }
+
+    // Otherwise, find an available CAN from default records that passes verification
+    for (const rec of DEFAULT_CUSTOMER_RECORDS) {
+      const canCheck = await verifyCANRecord(rec.can, fullName);
+      if (canCheck.valid) {
+        return {
+          can: rec.can,
+          customer: { ...(canCheck.customer || rec), email: normEmail },
+        };
+      }
+    }
+  }
+
+  // 2. Local / Offline Engine
+  const customers = await getStoredCustomers();
+  const users = await getStoredUsers();
+
+  // Step 2a: Check if an unclaimed record already has this email
+  const matchedByEmail = customers.find(
+    (c) =>
+      c.email?.toLowerCase() === normEmail &&
+      !c.isRegistered &&
+      !users.some((u) => u.user.can === c.can)
+  );
+  if (matchedByEmail) {
+    return { can: matchedByEmail.can, customer: matchedByEmail };
+  }
+
+  // Step 2b: Check if an unassigned record (no email attached) is available
+  const unassigned = customers.find(
+    (c) =>
+      (!c.email || c.email.trim() === '') &&
+      !c.isRegistered &&
+      !users.some((u) => u.user.can === c.can)
+  );
+
+  if (unassigned) {
+    unassigned.email = normEmail;
+    if (fullName && fullName.trim().length > 1) {
+      unassigned.accountHolderName = fullName.trim();
+    }
+    const updated = customers.map((c) => (c.can === unassigned.can ? unassigned : c));
+    await AsyncStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(updated));
+    return { can: unassigned.can, customer: unassigned };
+  }
+
+  // Step 2c: If all pre-seeded records are claimed or allocated to other emails,
+  // auto-generate a new 10-digit CAN in official Meralco range
+  let newCan = '';
+  for (let i = 0; i < 20; i++) {
+    const candidate = '10' + Math.floor(10000000 + Math.random() * 90000000).toString().slice(0, 8);
+    if (!customers.some((c) => c.can === candidate) && !users.some((u) => u.user.can === candidate)) {
+      newCan = candidate;
+      break;
+    }
+  }
+  if (!newCan) {
+    newCan = '10' + (Date.now() + Math.floor(Math.random() * 1000)).toString().slice(-8);
+  }
+
+  const newCustomer: CustomerRecord = {
+    can: newCan,
+    sin: formatCANDisplay(newCan),
+    accountHolderName: fullName?.trim() || 'Meralco Customer',
+    email: normEmail,
+    serviceAddress: 'Meralco Franchise Area, Metro Manila',
+    rateClass: 'Residential',
+    monthlyBudget: 3500,
+    householdMembers: 5,
+    majorAppliances: ['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
+    isRegistered: false,
+  };
+
+  customers.push(newCustomer);
+  await AsyncStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+  return { can: newCan, customer: newCustomer };
+}
+
+// ==============================================================================
 // 2. Real-time Uniqueness Checks (Username & Email)
 // ==============================================================================
 export async function checkUsernameUnique(username: string): Promise<boolean> {
@@ -475,71 +673,15 @@ export async function registerUser(
     return { success: false, error: 'Email address is already registered.' };
   }
 
-  // Customer Account Number (CAN) Allocation & Verification
-  // If user provided a CAN, validate against Meralco records;
-  // If not, Meralco automatically allocates their official CAN and sends it to their registered email!
-  let cleanDigits = formData.can ? cleanCAN(formData.can) : '';
-  let customerInfo: CustomerRecord | undefined;
-
-  if (cleanDigits) {
-    const canVal = validateCAN(cleanDigits);
-    if (!canVal.isValid) return { success: false, error: canVal.message };
-
-    const canCheck = await verifyCANRecord(cleanDigits, formData.fullName);
-    if (!canCheck.valid) {
-      return { success: false, error: canCheck.message };
-    }
-    customerInfo = canCheck.customer;
-  } else {
-    // Automatically allocate official Meralco CAN for the user
-    // If live Supabase is configured, dynamically query for an unregistered valid CAN
-    if (isLiveSupabaseConfigured() && supabase) {
-      for (const rec of DEFAULT_CUSTOMER_RECORDS) {
-        const canCheck = await verifyCANRecord(rec.can, formData.fullName);
-        if (canCheck.valid) {
-          cleanDigits = rec.can;
-          customerInfo = canCheck.customer || rec;
-          break;
-        }
-      }
-    }
-
-    if (!cleanDigits) {
-      const customers = await getStoredCustomers();
-      const users = await getStoredUsers();
-
-      // Check if name matches an existing Meralco account first
-      const trimmedNameLower = formData.fullName.trim().toLowerCase();
-      const matchedByName = customers.find(
-        (c) => !c.isRegistered && !users.some((u) => u.user.can === c.can) &&
-               c.accountHolderName.toLowerCase() === trimmedNameLower
-      );
-
-      const available = matchedByName || customers.find(
-        (c) => !c.isRegistered && !users.some((u) => u.user.can === c.can)
-      );
-
-      if (available) {
-        cleanDigits = available.can;
-        customerInfo = available;
-      } else {
-        // Auto-generate 10-digit CAN in official Meralco customer range
-        const newCan = '10' + Math.floor(10000000 + Math.random() * 90000000).toString().slice(0, 8);
-        cleanDigits = newCan;
-        customerInfo = {
-          can: newCan,
-          sin: formatCANDisplay(newCan),
-          accountHolderName: formData.fullName.trim(),
-          serviceAddress: 'Meralco Service Franchise, Metro Manila',
-          rateClass: 'Residential',
-          monthlyBudget: 3500,
-          householdMembers: 5,
-          majorAppliances: ['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
-          isRegistered: false,
-        };
-      }
-    }
-  }
+  // Customer Account Number (CAN) Allocation & Email Linking
+  // Pre-registered Meralco CAN is linked to user's email address
+  const linked = await getLinkedCANForEmail(
+    formData.email,
+    formData.fullName,
+    formData.can
+  );
+  const cleanDigits = linked.can;
+  const customerInfo = linked.customer;
 
   // Execute Live Supabase Registration if configured
   if (isLiveSupabaseConfigured() && supabase) {

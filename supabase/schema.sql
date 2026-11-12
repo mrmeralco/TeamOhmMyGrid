@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.meralco_customers (
     can VARCHAR(10) PRIMARY KEY,
     sin VARCHAR(14) NOT NULL UNIQUE, -- e.g. '1234-5678-90'
     account_holder_name VARCHAR(100) NOT NULL,
+    email TEXT,
     service_address TEXT NOT NULL,
     rate_class VARCHAR(20) DEFAULT 'Residential',
     monthly_budget NUMERIC(10, 2) DEFAULT 3500.00,
@@ -27,6 +28,8 @@ CREATE TABLE IF NOT EXISTS public.meralco_customers (
 
     CONSTRAINT can_format_check CHECK (can ~ '^[0-9]{10}$')
 );
+
+CREATE INDEX IF NOT EXISTS idx_meralco_customers_email ON public.meralco_customers(LOWER(email));
 
 COMMENT ON TABLE public.meralco_customers IS 'Pre-existing utility billing records against which new registrations are verified.';
 
@@ -376,6 +379,120 @@ BEGIN
 END;
 $$;
 
+-- 7.5 Get or Assign Meralco Customer CAN by Email for Registration
+-- Pre-registers or matches an email to a Meralco CAN
+CREATE OR REPLACE FUNCTION public.get_meralco_customer_by_email(
+    p_email TEXT,
+    p_full_name TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_norm_email TEXT := lower(trim(p_email));
+    v_customer RECORD;
+    v_gen_can TEXT;
+    v_gen_sin TEXT;
+BEGIN
+    -- 1. Look for pre-registered utility customer by email that is not yet claimed in profiles
+    SELECT * INTO v_customer
+    FROM public.meralco_customers
+    WHERE lower(email) = v_norm_email
+      AND can NOT IN (SELECT can FROM public.profiles)
+    LIMIT 1;
+
+    IF FOUND THEN
+        RETURN jsonb_build_object(
+            'found', true,
+            'can', v_customer.can,
+            'sin', v_customer.sin,
+            'account_holder', v_customer.account_holder_name,
+            'service_address', v_customer.service_address,
+            'rate_class', v_customer.rate_class,
+            'monthly_budget', v_customer.monthly_budget,
+            'household_members', v_customer.household_members,
+            'major_appliances', v_customer.major_appliances
+        );
+    END IF;
+
+    -- 2. If no record has this email, look for an unassigned customer record (no email attached)
+    SELECT * INTO v_customer
+    FROM public.meralco_customers
+    WHERE (email IS NULL OR email = '')
+      AND is_registered = FALSE
+      AND can NOT IN (SELECT can FROM public.profiles)
+    ORDER BY can ASC
+    LIMIT 1;
+
+    IF FOUND THEN
+        -- Link this customer record with the email
+        UPDATE public.meralco_customers
+        SET email = v_norm_email,
+            account_holder_name = COALESCE(p_full_name, account_holder_name)
+        WHERE can = v_customer.can;
+
+        RETURN jsonb_build_object(
+            'found', true,
+            'can', v_customer.can,
+            'sin', v_customer.sin,
+            'account_holder', COALESCE(p_full_name, v_customer.account_holder_name),
+            'service_address', v_customer.service_address,
+            'rate_class', v_customer.rate_class,
+            'monthly_budget', v_customer.monthly_budget,
+            'household_members', v_customer.household_members,
+            'major_appliances', v_customer.major_appliances
+        );
+    END IF;
+
+    -- 3. If all records are claimed, generate a new 10-digit CAN in Meralco range
+    LOOP
+        v_gen_can := '10' || lpad((floor(random() * 90000000) + 10000000)::text, 8, '0');
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM public.meralco_customers WHERE can = v_gen_can);
+    END LOOP;
+
+    v_gen_sin := regexp_replace(v_gen_can, '(\d{4})(\d{4})(\d{2})', '\1-\2-\3');
+
+    INSERT INTO public.meralco_customers (
+        can,
+        sin,
+        account_holder_name,
+        email,
+        service_address,
+        rate_class,
+        monthly_budget,
+        household_members,
+        major_appliances,
+        is_registered
+    ) VALUES (
+        v_gen_can,
+        v_gen_sin,
+        COALESCE(p_full_name, 'Meralco Customer'),
+        v_norm_email,
+        'Meralco Franchise Area, Metro Manila',
+        'Residential',
+        3500.00,
+        5,
+        ARRAY['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
+        FALSE
+    )
+    RETURNING * INTO v_customer;
+
+    RETURN jsonb_build_object(
+        'found', true,
+        'can', v_customer.can,
+        'sin', v_customer.sin,
+        'account_holder', v_customer.account_holder_name,
+        'service_address', v_customer.service_address,
+        'rate_class', v_customer.rate_class,
+        'monthly_budget', v_customer.monthly_budget,
+        'household_members', v_customer.household_members,
+        'major_appliances', v_customer.major_appliances
+    );
+END;
+$$;
+
 -- ==============================================================================
 -- 8. Supabase Auth Trigger (Handles new user registration)
 -- Automatically copies verified user metadata from auth.users into public.profiles
@@ -399,6 +516,15 @@ BEGIN
     v_can       := trim(NEW.raw_user_meta_data->>'can');
     v_clean_can := regexp_replace(v_can, '\D', '', 'g');
 
+    -- If CAN was not passed in metadata, lookup pre-registered CAN by email
+    IF v_clean_can IS NULL OR length(v_clean_can) <> 10 THEN
+        SELECT can INTO v_clean_can
+        FROM public.meralco_customers
+        WHERE lower(email) = lower(NEW.email)
+          AND can NOT IN (SELECT can FROM public.profiles)
+        LIMIT 1;
+    END IF;
+
     -- Server-side validation assertions
     IF v_full_name IS NULL OR length(v_full_name) < 2 OR v_full_name !~* '^[A-Za-z ]{2,80}$' THEN
         RAISE EXCEPTION 'Full name must contain only alphabetic characters and spaces (minimum 2 characters)';
@@ -412,9 +538,33 @@ BEGIN
         RAISE EXCEPTION 'Customer Account Number (CAN) must be exactly 10 numeric digits';
     END IF;
 
-    -- Ensure CAN exists in utility records
+    -- Ensure CAN exists in utility records; if new, register it in meralco_customers
     IF NOT EXISTS (SELECT 1 FROM public.meralco_customers WHERE can = v_clean_can) THEN
-        RAISE EXCEPTION 'Customer Account Number (CAN) is not recognized in customer records';
+        INSERT INTO public.meralco_customers (
+            can,
+            sin,
+            account_holder_name,
+            email,
+            service_address,
+            rate_class,
+            monthly_budget,
+            household_members,
+            major_appliances,
+            is_registered,
+            registered_at
+        ) VALUES (
+            v_clean_can,
+            regexp_replace(v_clean_can, '(\d{4})(\d{4})(\d{2})', '\1-\2-\3'),
+            v_full_name,
+            NEW.email,
+            'Meralco Franchise Area, Metro Manila',
+            'Residential',
+            3500.00,
+            5,
+            ARRAY['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
+            TRUE,
+            now()
+        );
     END IF;
 
     -- Ensure CAN is not already claimed

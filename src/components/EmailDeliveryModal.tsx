@@ -49,9 +49,9 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
                 <Text style={styles.badgeText}>Verified: {user.email}</Text>
               </View>
             </View>
-            <Text style={styles.title}>Email verified!</Text>
+            <Text style={styles.title}>Account created & verified!</Text>
             <Text style={styles.subtitle}>
-              Your linked Customer Account Number (CAN) is shown below.
+              Your Meralco CAN linked to your email has been connected.
             </Text>
           </View>
 
@@ -66,7 +66,7 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
                   <Text style={styles.senderBold}>To:</Text> {user.email}
                 </Text>
                 <Text style={styles.senderText}>
-                  <Text style={styles.senderBold}>Subject:</Text> Your Meralco Customer Account Number (CAN)
+                  <Text style={styles.senderBold}>Subject:</Text> Your Linked Meralco Customer Account Number (CAN)
                 </Text>
               </View>
 
@@ -74,7 +74,7 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
                 <Text style={styles.greeting}>Magandang araw, {user.fullName}!</Text>
                 <Text style={styles.letterText}>
                   Salamat sa pag-sign up sa <Text style={styles.boldText}>KuryenTipid</Text>.
-                  Ang iyong opisyal na Meralco Customer Account Number (CAN) para sa iyong service address ay matagumpay na nai-link:
+                  Ang iyong opisyal na Meralco Customer Account Number (CAN) na naka-link sa iyong email ({user.email}) ay matagumpay na nai-connect:
                 </Text>
 
                 {/* Highlighted CAN Box */}

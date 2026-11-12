@@ -22,7 +22,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { register, refreshSession } = useAuth();
   const configured = isLiveSupabaseConfigured();
-  const [form, setForm] = useState<RegistrationFormData>({ fullName: '', username: '', email: '', can: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState<RegistrationFormData>({ fullName: '', username: '', email: '', password: '', confirmPassword: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,7 +69,6 @@ export default function RegisterScreen() {
     Object.entries(validations).forEach(([key, result]) => {
       if (!result.isValid) nextErrors[key] = result.message || 'Check this field.';
     });
-    if (form.can && !/^\d{10}$/.test(form.can)) nextErrors.can = 'Enter the 10 digits from your bill.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setBusy(true);
@@ -149,14 +148,13 @@ export default function RegisterScreen() {
               <Field label="Full name" placeholder="Your full name" value={form.fullName} onChangeText={value => change('fullName', value)} error={errors.fullName} autoComplete="name" editable={!busy} />
               <Field label="Username" placeholder="4–20 letters or numbers" value={form.username} onChangeText={value => change('username', value.trim().toLowerCase())} error={errors.username} autoCapitalize="none" autoCorrect={false} editable={!busy} />
               <Field label="Email address" placeholder="you@example.com" value={form.email} onChangeText={value => change('email', value.trim())} error={errors.email} keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} editable={!busy} />
-              <Field label="CAN (optional)" placeholder="10-digit number on your bill" value={form.can} onChangeText={value => change('can', value.replace(/\D/g, ''))} error={errors.can} keyboardType="number-pad" maxLength={10} editable={!busy} />
               <Field label="Password" placeholder="At least 8 characters" value={form.password} onChangeText={value => change('password', value)} error={errors.password} secureTextEntry={!showPassword} autoComplete="new-password" autoCapitalize="none" editable={!busy} />
               <View style={styles.passwordHelp}>
                 <Text accessibilityLiveRegion="polite" style={[styles.helper, styles.strengthText]}>{form.password ? `Strength: ${strength.strengthLabel}${strength.strengthLabel !== 'Strong' && passwordTip ? ` - ${passwordTip}` : ''}` : 'Use a letter and a number.'}</Text>
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel={showPassword ? 'Hide passwords' : 'Show passwords'} onPress={() => setShowPassword(!showPassword)}><Text style={styles.linkText}>{showPassword ? 'Hide' : 'Show'}</Text></TouchableOpacity>
               </View>
               <Field label="Confirm password" placeholder="Re-enter your password" value={form.confirmPassword} onChangeText={value => change('confirmPassword', value)} error={errors.confirmPassword} secureTextEntry={!showPassword} autoComplete="new-password" autoCapitalize="none" editable={!busy} onSubmitEditing={submit} />
-              <Text style={styles.helper}>We’ll send a code to verify your email.</Text>
+              <Text style={styles.helper}>Your Meralco CAN will be automatically linked to your email.</Text>
               <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || !configured) && styles.disabled]} disabled={busy || !configured} onPress={submit}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{configured ? 'Send verification code' : 'Email delivery unavailable'}</Text>}
               </TouchableOpacity>

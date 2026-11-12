@@ -4,6 +4,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 
 import {
   verifyCANRecord,
+  getLinkedCANForEmail,
   checkUsernameUnique,
   checkEmailUnique,
   checkRateLimit,
@@ -147,6 +148,53 @@ describe('Security & Auth Integration Tests', () => {
       await logoutUser();
       const afterLogout = await getActiveSession();
       expect(afterLogout).toBeNull();
+    });
+  });
+
+  describe('7. Pre-registered Email-to-CAN Linking for Meralco Utility Database', () => {
+    it('associates all pre-seeded Meralco utility customer records with valid email addresses', () => {
+      DEFAULT_CUSTOMER_RECORDS.forEach((record) => {
+        expect(record.email).toBeDefined();
+        expect(record.email).toMatch(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/);
+      });
+    });
+
+    it('returns the linked Meralco CAN for a pre-registered email', async () => {
+      const linked = await getLinkedCANForEmail('jaeda.iral@teamohmygrid.ph', 'Jaeda Marthena Iral');
+      expect(linked.can).toBe('1234567891');
+      expect(linked.customer.accountHolderName).toBe('Jaeda Marthena Iral');
+      expect(linked.customer.email).toBe('jaeda.iral@teamohmygrid.ph');
+    });
+
+    it('matches pre-registered email case-insensitively and handles whitespace', async () => {
+      const linked = await getLinkedCANForEmail('   CARL.ENRIQUEZ@TEAMOHMYGRID.PH   ');
+      expect(linked.can).toBe('1234567892');
+      expect(linked.customer.accountHolderName).toBe('Carl Benedict Enriquez');
+    });
+
+    it('verifies and returns an explicitly provided preferred CAN when valid', async () => {
+      const linked = await getLinkedCANForEmail('custom.user@example.com', 'Jaeda Marthena Iral', '1234567891');
+      expect(linked.can).toBe('1234567891');
+    });
+
+    it('seamlessly assigns an available Meralco CAN for a new/custom unregistered email', async () => {
+      const linked = await getLinkedCANForEmail('new.customer@gmail.com', 'New Customer');
+      expect(linked.can).toBeDefined();
+      expect(linked.can).toHaveLength(10);
+      expect(linked.customer.email).toBe('new.customer@gmail.com');
+    });
+
+    it('generates a valid 10-digit CAN in official Meralco range when all records are exhausted', async () => {
+      const results: string[] = [];
+      // Request 15 unique emails to exceed the 8 pre-seeded records
+      for (let i = 0; i < 15; i++) {
+        const res = await getLinkedCANForEmail(`resident${i}@example.com`, `Resident ${i}`);
+        results.push(res.can);
+        expect(res.can).toMatch(/^\d{10}$/);
+      }
+      // Each allocated CAN should be distinct
+      const unique = new Set(results);
+      expect(unique.size).toBe(15);
     });
   });
 });
