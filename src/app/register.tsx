@@ -6,7 +6,7 @@ import { isLiveSupabaseConfigured } from '../config/supabase';
 import { useAuth } from '../context/AuthContext';
 import { confirmRegistrationOTP, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
 import { RegistrationFormData, UserProfile } from '../types/auth';
-import { evaluatePassword, validateConfirmPassword, validateEmail, validateFullName, validatePassword, validateUsername } from '../utils/validation';
+import { evaluatePassword, formatCANDisplay, validateConfirmPassword, validateEmail, validateFullName, validatePassword, validateUsername } from '../utils/validation';
 
 function Field({ label, error, ...props }: TextInputProps & { label: string; error?: string }) {
   return (
@@ -42,6 +42,9 @@ export default function RegisterScreen() {
       if (!active || !pending || !configured) return;
       setPendingEmail(pending.email);
       setForm(prev => ({ ...prev, email: pending.email }));
+      if (pending.can) {
+        setRegisteredUser(prev => prev || ({ email: pending.email, can: pending.can } as UserProfile));
+      }
       setResendAt(pending.sentAt + 60000);
       setVerificationOpen(true);
     }).catch(() => {});
@@ -77,6 +80,7 @@ export default function RegisterScreen() {
       const result = await register(form);
       if (!result.success || !result.data) { setError(result.error || 'Unable to create your account.'); return; }
       setPendingEmail(result.data.email);
+      setRegisteredUser(result.data);
       setCode('');
       setNotice('');
       setNow(Date.now());
@@ -127,6 +131,13 @@ export default function RegisterScreen() {
           <Text style={styles.title}>{verificationOpen ? 'Check your email' : 'Create your account'}</Text>
           <Text style={styles.subtitle}>{verificationOpen ? 'Enter the 6-digit verification code for' : 'Start managing your household electricity.'}</Text>
           {verificationOpen && <Text style={styles.email}>{pendingEmail}</Text>}
+          {verificationOpen && !!registeredUser?.can && (
+            <View style={styles.canBadgeContainer}>
+              <Text style={styles.canBadgeText}>
+                Meralco CAN: {formatCANDisplay(registeredUser.can)}
+              </Text>
+            </View>
+          )}
           {!!error && <View style={styles.banner}><Text accessibilityRole="alert" style={styles.bannerText}>{error}</Text></View>}
           {verificationOpen ? (
             <View>
@@ -179,6 +190,23 @@ const styles = StyleSheet.create({
   title: { color: '#0f172a', fontSize: 27, fontWeight: '800', marginBottom: 8 },
   subtitle: { color: '#64748b', fontSize: 14, lineHeight: 21, marginBottom: 24 },
   email: { color: '#0f172a', fontSize: 15, fontWeight: '600', marginBottom: 24, marginTop: -16 },
+  canBadgeContainer: {
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'center',
+    marginTop: -14,
+    marginBottom: 20,
+  },
+  canBadgeText: {
+    color: '#c2410c',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   field: { marginBottom: 15 },
   label: { color: '#334155', fontSize: 13, fontWeight: '600', marginBottom: 7 },
   input: { minHeight: 48, width: '100%', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' },

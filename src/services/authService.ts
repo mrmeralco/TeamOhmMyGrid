@@ -723,8 +723,11 @@ export async function registerUser(
         await supabase.auth.signOut();
         return { success: false, error: 'Enable Confirm email in Supabase. Email verification is required.' };
       }
-      // Keep only the address and send time so a reload can resume verification.
-      await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ email: profile.email, sentAt: Date.now() }));
+      // Keep only the address, send time, and linked CAN so a reload can resume verification.
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.PENDING_EMAIL,
+        JSON.stringify({ email: profile.email, sentAt: Date.now(), can: profile.can })
+      );
       return { success: true, data: profile };
     } catch {
       return { success: false, error: 'Unable to send verification email. Please try again.' };
@@ -733,14 +736,14 @@ export async function registerUser(
   return { success: false, error: 'Email verification is not configured.' };
 }
 
-export async function getPendingEmailVerification(): Promise<{ email: string; sentAt: number } | null> {
+export async function getPendingEmailVerification(): Promise<{ email: string; sentAt: number; can?: string } | null> {
   const raw = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_EMAIL);
   if (!raw) return null;
   try {
     const pending = JSON.parse(raw);
     return typeof pending.email === 'string' && validateEmail(pending.email).isValid &&
       typeof pending.sentAt === 'number' && Number.isFinite(pending.sentAt)
-      ? { email: pending.email, sentAt: pending.sentAt } : null;
+      ? { email: pending.email, sentAt: pending.sentAt, can: typeof pending.can === 'string' ? pending.can : undefined } : null;
   } catch { return null; }
 }
 

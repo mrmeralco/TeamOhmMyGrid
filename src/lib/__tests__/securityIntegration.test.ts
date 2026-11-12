@@ -5,6 +5,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 import {
   verifyCANRecord,
   getLinkedCANForEmail,
+  getPendingEmailVerification,
   checkUsernameUnique,
   checkEmailUnique,
   checkRateLimit,
@@ -16,6 +17,8 @@ import {
   resetDatabaseToSeed,
   DEFAULT_CUSTOMER_RECORDS,
 } from '../../services/authService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { formatCANDisplay } from '../../utils/validation';
 
 describe('Security & Auth Integration Tests', () => {
   beforeEach(async () => {
@@ -195,6 +198,21 @@ describe('Security & Auth Integration Tests', () => {
       // Each allocated CAN should be distinct
       const unique = new Set(results);
       expect(unique.size).toBe(15);
+    });
+
+    it('stores and recovers linked Meralco CAN in pending email verification', async () => {
+      const email = 'resident.test@example.com';
+      const can = '1234567891';
+      await AsyncStorage.setItem(
+        '@kuryentipid_pending_email_verification',
+        JSON.stringify({ email, sentAt: Date.now(), can })
+      );
+
+      const pending = await getPendingEmailVerification();
+      expect(pending).not.toBeNull();
+      expect(pending?.email).toBe(email);
+      expect(pending?.can).toBe(can);
+      expect(formatCANDisplay(pending!.can!)).toBe('1234-5678-91');
     });
   });
 });

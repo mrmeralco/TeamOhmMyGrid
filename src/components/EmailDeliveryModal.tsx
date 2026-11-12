@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { UserProfile } from '../types/auth';
+import { formatCANDisplay } from '../utils/validation';
 
 interface EmailDeliveryModalProps {
   visible: boolean;
@@ -80,8 +81,8 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
                 {/* Highlighted CAN Box */}
                 <View style={styles.canHighlightBox}>
                   <Text style={styles.canLabel}>MERALCO CUSTOMER ACCOUNT NUMBER (CAN)</Text>
-                  <Text style={styles.canNumber}>{user.can}</Text>
-                  <Text style={styles.sinLabel}>SIN: {user.sin}</Text>
+                  <Text style={styles.canNumber}>{formatCANDisplay(user.can)}</Text>
+                  <Text style={styles.sinLabel}>Meralco CAN: {formatCANDisplay(user.can)}</Text>
 
                   <TouchableOpacity
                     style={styles.copyBtn}
@@ -100,7 +101,7 @@ export const EmailDeliveryModal: React.FC<EmailDeliveryModalProps> = ({
                   <Text style={styles.loginHintText}>
                     Maaari ka nang mag-log in gamit ang:
                   </Text>
-                  <Text style={styles.loginBullet}>• Iyong CAN: <Text style={styles.boldText}>{user.can}</Text></Text>
+                  <Text style={styles.loginBullet}>• Iyong CAN: <Text style={styles.boldText}>{formatCANDisplay(user.can)} ({user.can})</Text></Text>
                   <Text style={styles.loginBullet}>• Iyong Username: <Text style={styles.boldText}>@{user.username}</Text></Text>
                   <Text style={styles.loginBullet}>• Iyong Email: <Text style={styles.boldText}>{user.email}</Text></Text>
                 </View>
