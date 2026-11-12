@@ -1,65 +1,308 @@
-import { useAuth } from '../context/AuthContext';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Image,
+  Pressable,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
-import { analyzeUsageData } from '../services/GeminiService';
-import { getUsageDemo, UsageAnalysis, UsageScenario } from '../lib/usageAnalysis';
 
-const peso = (n: number) => '\u20b1' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const TIPI_MASCOT = require('../../assets/tipi-mascot.png');
+
 export function UsageAnalysisCard() {
-  const { user } = useAuth();
-  const { theme, fontScale } = useTheme();
-  const [scenario, setScenario] = useState<UsageScenario>('baseline');
-  const [analysis, setAnalysis] = useState<UsageAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
-  const demo = getUsageDemo(scenario);
+  const { fontScale, language } = useTheme();
+
+  // Floating animation for mascot
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const shadowScale = useRef(new Animated.Value(1)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    const timer = setTimeout(() => controller.abort(), 45000);
-    setLoading(true); setAnalysis(null); setError('');
-    analyzeUsageData(scenario, controller.signal).then(value => {
-      if (active) setAnalysis(value);
-    }).catch(err => {
-      if (active) setError(err.name === 'AbortError' ? 'Analysis timed out. Please try again.' : err.message || 'Analysis unavailable.');
-    }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [scenario, attempt, user?.id]);
-  const color = analysis?.will_exceed_budget ? theme.danger : theme.ok;
-  return <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.line }]}>
-    <Text style={[styles.title, { color: theme.ink, fontSize: 18 * fontScale }]}>Tipi budget analysis</Text>
-    <Text style={[styles.body, { color: theme.muted, fontSize: 12 * fontScale }]}>MOCK DATA DEMO - separate from your account totals above. Gemini estimates the likely appliance; it cannot confirm its identity.</Text>
-    <View style={styles.options}>
-      {(['baseline', 'warning'] as const).map(option => <TouchableOpacity key={option} accessibilityRole="button" accessibilityState={{ selected: scenario === option }}
-        onPress={() => { setLoading(true); setAnalysis(null); setError(''); setScenario(option); }} disabled={scenario === option}
-        style={[styles.option, { backgroundColor: scenario === option ? theme.brand : theme.cont, borderColor: theme.line }]}>
-        <Text style={{ color: scenario === option ? theme.brandInk : theme.ink, fontSize: 13 * fontScale }}>{option === 'baseline' ? 'On-track example' : 'Warning example'}</Text>
-      </TouchableOpacity>)}
-    </View>
-    <Text style={[styles.body, { color: theme.muted, fontSize: 13 * fontScale }]}>{peso(demo.currentBill)} so far / {peso(demo.budget)} budget{'\n'}5 days left - {peso(demo.rate)}/kWh</Text>
-    {loading ? <View style={styles.loading} accessibilityLiveRegion="polite"><ActivityIndicator color={theme.brand} /><Text style={{ color: theme.muted }}>Sinusuri ang mock usage...</Text></View>
-      : error ? <View accessibilityLiveRegion="polite"><Text style={[styles.body, { color: theme.danger, fontSize: 14 * fontScale }]}>{error}</Text></View>
-      : analysis ? <View style={[styles.result, { backgroundColor: analysis.will_exceed_budget ? theme.dangerBg : theme.okBg }]} accessibilityLiveRegion="polite">
-        <Text style={[styles.title, { color, fontSize: 18 * fontScale }]}>{analysis.will_exceed_budget ? 'Budget warning' : 'On track'}</Text>
-        <Text style={[styles.body, { color, fontSize: 15 * fontScale }]}>{analysis.alert_message}</Text>
-        <Text style={{ color, fontSize: 13 * fontScale }}>Projected final bill</Text>
-        <Text style={[styles.amount, { color, fontSize: 28 * fontScale }]}>{peso(analysis.projected_final_bill)}</Text>
-        <Text style={[styles.body, { color, fontSize: 14 * fontScale }]}>Possible appliance: {analysis.culprit_appliance}</Text>
-      </View> : null}
-    {!loading && <TouchableOpacity accessibilityRole="button" onPress={() => setAttempt(n => n + 1)} style={[styles.retry, { borderColor: theme.brand }]}>
-      <Text style={{ color: theme.brand, fontWeight: '700', fontSize: 14 * fontScale }}>{error ? 'Try again' : 'Refresh analysis'}</Text>
-    </TouchableOpacity>}
-    <Text style={[styles.body, { color: theme.muted, fontSize: 12 * fontScale }]}>Three identical mock days: 150 W baseline, 1600 W from 13:00-16:00, and 200 W from 18:00-24:00. Assumes this pattern continues; actual billing may differ. AI responses may be reused for five minutes.</Text>
-  </View>;
+    // Continuous smooth floating loop (sine wave up & down)
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(floatAnim, {
+            toValue: -10,
+            duration: 1600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shadowScale, {
+            toValue: 0.82,
+            duration: 1600,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(floatAnim, {
+            toValue: 2,
+            duration: 1600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shadowScale, {
+            toValue: 1.15,
+            duration: 1600,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+    floatLoop.start();
+
+    return () => floatLoop.stop();
+  }, [floatAnim, shadowScale]);
+
+  // Press feedback
+  const handlePressIn = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    Animated.spring(pressScale, {
+      toValue: 0.965,
+      friction: 8,
+      tension: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressScale, {
+      toValue: 1,
+      friction: 6,
+      tension: 180,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleCardPress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    router.push('/(tabs)/tanong');
+  };
+
+  // Language options: minimal text & "simulan ang chat dito" for Filipino
+  const isFilipino = language === 'filipino';
+  const isEnglish = language === 'english';
+
+  const titleText = isEnglish
+    ? 'Start chat here'
+    : 'Simulan ang\nchat dito';
+
+  const badgeText = isEnglish ? 'TIPI AI' : 'TIPI AI';
+
+  const hintText = isEnglish
+    ? 'Ask anything about your bill'
+    : isFilipino
+    ? 'Magtanong ukol sa kuryente'
+    : 'Ask tips para makatipid';
+
+  const buttonText = isEnglish ? 'Chat now →' : isFilipino ? 'Mag-chat →' : 'Chat na →';
+
+  return (
+    <Pressable
+      onPress={handleCardPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      accessibilityRole="button"
+      accessibilityLabel={isFilipino ? 'Simulan ang chat dito kay Tipi' : 'Start chat here with Tipi'}
+    >
+      <Animated.View style={{ transform: [{ scale: pressScale }] }}>
+        <LinearGradient
+          colors={['#FF4E00', '#FF7000', '#FFA100']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.card}
+        >
+          {/* Decorative glowing circles in background */}
+          <View style={styles.ambientCircleOne} />
+          <View style={styles.ambientCircleTwo} />
+
+          {/* Left Text Column: Minimal, punchy */}
+          <View style={styles.textSide}>
+            <View style={styles.badgePill}>
+              <View style={styles.livePulseDot} />
+              <Text style={[styles.badgeText, { fontSize: 11 * fontScale }]}>
+                {badgeText}
+              </Text>
+            </View>
+
+            <Text
+              style={[
+                styles.title,
+                { fontSize: 24 * fontScale, lineHeight: 28 * fontScale },
+              ]}
+              numberOfLines={2}
+            >
+              {titleText}
+            </Text>
+
+            <Text
+              style={[styles.subtitle, { fontSize: 12 * fontScale }]}
+              numberOfLines={1}
+            >
+              {hintText}
+            </Text>
+
+            {/* Fluid Pill CTA */}
+            <View style={styles.ctaButton}>
+              <Text style={[styles.ctaButtonText, { fontSize: 13 * fontScale }]}>
+                {buttonText}
+              </Text>
+            </View>
+          </View>
+
+          {/* Right Avatar Column with Floating Animation */}
+          <View style={styles.mascotContainer}>
+            <Animated.View
+              style={[
+                styles.mascotAnimatedWrapper,
+                { transform: [{ translateY: floatAnim }] },
+              ]}
+            >
+              <Image
+                source={TIPI_MASCOT}
+                style={styles.mascotImage}
+                resizeMode="contain"
+              />
+            </Animated.View>
+
+            {/* Floating shadow that reacts to mascot height */}
+            <Animated.View
+              style={[
+                styles.floatingShadow,
+                { transform: [{ scaleX: shadowScale }] },
+              ]}
+            />
+          </View>
+        </LinearGradient>
+      </Animated.View>
+    </Pressable>
+  );
 }
+
 const styles = StyleSheet.create({
-  card: { borderWidth: 1.5, borderRadius: 16, padding: 16, marginVertical: 6, gap: 12 },
-  title: { fontWeight: '800' }, body: { lineHeight: 22 },
-  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  option: { minHeight: 48, padding: 12, borderWidth: 1, borderRadius: 10, justifyContent: 'center' },
-  loading: { alignItems: 'center', gap: 12, paddingVertical: 20 },
-  result: { borderRadius: 12, padding: 16, gap: 10 }, amount: { fontWeight: '800' },
-  retry: { minHeight: 48, borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center', padding: 12 },
+  card: {
+    borderRadius: 22,
+    marginVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+    minHeight: 145,
+    paddingLeft: 20,
+    paddingRight: 14,
+    paddingVertical: 18,
+    position: 'relative',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  ambientCircleOne: {
+    position: 'absolute',
+    top: -30,
+    right: 40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  ambientCircleTwo: {
+    position: 'absolute',
+    bottom: -40,
+    left: -20,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  textSide: {
+    flex: 1,
+    justifyContent: 'center',
+    zIndex: 2,
+    paddingRight: 8,
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+    gap: 5,
+  },
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFE600',
+  },
+  badgeText: {
+    color: '#FFEAA7',
+    fontFamily: 'Coolvetica',
+    letterSpacing: 1.2,
+    fontWeight: '400',
+  },
+  title: {
+    color: '#FFFFFF',
+    fontFamily: 'Coolvetica',
+    letterSpacing: 0.3,
+    fontWeight: '400',
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  ctaButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  ctaButtonText: {
+    color: '#E64A00',
+    fontFamily: 'Coolvetica',
+    fontWeight: '400',
+    letterSpacing: 0.3,
+  },
+  mascotContainer: {
+    width: 125,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+    height: 140,
+  },
+  mascotAnimatedWrapper: {
+    width: '100%',
+    height: 125,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mascotImage: {
+    width: 120,
+    height: 125,
+  },
+  floatingShadow: {
+    width: 68,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    marginTop: -4,
+  },
 });
