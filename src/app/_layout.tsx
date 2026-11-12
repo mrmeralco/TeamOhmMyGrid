@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
@@ -8,10 +8,12 @@ import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { EnergyProvider } from '../context/EnergyContext';
 import { initNotificationHandler, registerDailyPeakAlerts } from '../lib/notificationService';
+import { StartupSplashScreen } from '../components/StartupSplashScreen';
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
   const { user, isLoading } = useAuth();
+  const [splashFinished, setSplashFinished] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
     Coolvetica: require('../../assets/fonts/Coolvetica.otf'),
   });
@@ -42,7 +44,7 @@ function AppNavigator() {
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: theme.bg,
+          backgroundColor: '#FFFFFF',
         }}
       >
         <ActivityIndicator size="large" color="#FF6B00" />
@@ -71,6 +73,10 @@ function AppNavigator() {
           }}
         />
       </Stack>
+
+      {!splashFinished && (
+        <StartupSplashScreen onFinish={() => setSplashFinished(true)} />
+      )}
     </>
   );
 }

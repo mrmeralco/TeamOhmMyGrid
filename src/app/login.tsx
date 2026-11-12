@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext';
 import { PageTransitionView } from '../components/PageTransitionView';
 import { CustomerRecord } from '../types/auth';
 import { detectIdentifierType, validateLoginIdentifier } from '../utils/validation';
+import { StartupSplashScreen } from '../components/StartupSplashScreen';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState<number | null>(null);
   const [seedModalVisible, setSeedModalVisible] = useState(false);
+  const [showSplashPreview, setShowSplashPreview] = useState(false);
 
   // Active identifier type detection
   const detectedType = detectIdentifierType(identifier);
@@ -271,6 +273,15 @@ export default function LoginScreen() {
             <Text style={styles.demoAccountsBtnText}>Demo Meralco Accounts (Quick Fill)</Text>
           </TouchableOpacity>
 
+          {/* Replay Startup Screen Animation Button */}
+          <TouchableOpacity
+            style={styles.replaySplashBtn}
+            onPress={() => setShowSplashPreview(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.replaySplashBtnText}>Replay Startup Animation (3s)</Text>
+          </TouchableOpacity>
+
           {/* Social Sign-in section matching Image 2 */}
           <SocialButtons
             onPressProvider={(provider) =>
@@ -286,6 +297,10 @@ export default function LoginScreen() {
         onClose={() => setSeedModalVisible(false)}
         onSelectAccount={handleSelectSeedAccount}
       />
+
+      {showSplashPreview && (
+        <StartupSplashScreen onFinish={() => setShowSplashPreview(false)} />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -463,12 +478,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   demoAccountsBtnText: {
     color: '#D95200',
     fontSize: 13,
     fontWeight: '400',
+    fontFamily: 'Coolvetica',
+  },
+  replaySplashBtn: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  replaySplashBtnText: {
+    color: '#ea580c',
+    fontSize: 13,
+    fontWeight: '500',
     fontFamily: 'Coolvetica',
   },
 });

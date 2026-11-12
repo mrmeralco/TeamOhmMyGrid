@@ -26,12 +26,14 @@ import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { PageTransitionView } from '../../components/PageTransitionView';
 import { MeterClassificationBadge } from '../../components/MeterClassificationBadge';
 import { formatCANDisplay } from '../../utils/validation';
+import { StartupSplashScreen } from '../../components/StartupSplashScreen';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { theme, fontScale, language } = useTheme();
   const isEnglish = language === 'english';
   const { user, logout } = useAuth();
+  const [showSplashPreview, setShowSplashPreview] = useState(false);
   const {
     budget,
     setBudget,
@@ -349,6 +351,29 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Replay Startup Screen Animation Button */}
+        <TouchableOpacity
+          style={{ backgroundColor: theme.surface, borderColor: theme.line, borderWidth: 1, marginBottom: 12, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16 }}
+          onPress={() => setShowSplashPreview(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#FF6B0018', justifyContent: 'center', alignItems: 'center' }}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path d="M8 5v14l11-7z" fill="#FF6B00" />
+              </Svg>
+            </View>
+            <View>
+              <Text style={{ color: theme.ink, fontWeight: '600', fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }}>
+                {isEnglish ? 'Preview Startup Intro (3s)' : 'Panoorin ang Startup Intro (3s)'}
+              </Text>
+              <Text style={{ color: theme.muted, fontSize: 11 * fontScale }}>
+                {isEnglish ? 'Orange liquid fill & glass logo merge' : 'Liquid fill at pagsasama ng logo'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
         {/* Logout Action */}
         <TouchableOpacity
           style={[styles.logoutBtn, { borderColor: '#fca5a5', backgroundColor: '#fef2f2' }]}
@@ -625,6 +650,10 @@ export default function ProfileScreen() {
           </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
+
+      {showSplashPreview && (
+        <StartupSplashScreen onFinish={() => setShowSplashPreview(false)} />
+      )}
     </SafeAreaView>
   );
 }
