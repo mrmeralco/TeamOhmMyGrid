@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BudgetGauge } from '../../components/BudgetGauge';
+import { UsageAnalysisCard } from '../../components/UsageAnalysisCard';
 import { TipiMascot } from '../../components/TipiMascot';
 import { ApplianceBreakdownCard } from '../../components/ApplianceBreakdownCard';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
@@ -59,6 +60,9 @@ export default function HomeScreen() {
 
         {/* Budget Circular Gauge Card */}
         <BudgetGauge projected={projected} budget={budget} />
+
+        {/* Tipi Gemini AI Usage & Budget Analysis Card */}
+        <UsageAnalysisCard />
 
         {/* Live Grid Metrics Row */}
         <View style={styles.metricsRow}>
