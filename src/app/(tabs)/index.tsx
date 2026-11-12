@@ -13,11 +13,10 @@ import { useEnergy } from '../../context/EnergyContext';
 import { BudgetGauge } from '../../components/BudgetGauge';
 import { UsageAnalysisCard } from '../../components/UsageAnalysisCard';
 import { TipiMascot } from '../../components/TipiMascot';
-import { ApplianceBreakdownCard } from '../../components/ApplianceBreakdownCard';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { calculateTierCliff } from '../../lib/tariffEngine';
-import { MOCK_APPLIANCES, MOCK_USER } from '../../constants/mockData';
+import { MOCK_USER } from '../../constants/mockData';
 
 export default function HomeScreen() {
   const { theme, fontScale } = useTheme();
@@ -101,9 +100,6 @@ export default function HomeScreen() {
             </Text>
           </View>
         </TouchableOpacity>
-
-        {/* iPad Storage Style Scrollable Appliance Disaggregation Card */}
-        <ApplianceBreakdownCard appliances={MOCK_APPLIANCES} totalKwh={currentKwh} />
 
         {/* Quick Action: Scan Meralco Bill */}
         <TouchableOpacity
