@@ -17,10 +17,26 @@ To bridge this gap, **KuryenTipid** is proposed as an innovative, AI-driven mobi
 
 ## ✨ Key Features
 
-- **Autonomous Budget Agent:** Users can set a strict monthly budget ceiling (e.g., ₱3,500). The AI continuously monitors real-time smart-meter data and proactively sends voice alerts to suggest immediate behavioral changes—such as adjusting an air conditioner's eco-timer—*before* the budget limit is breached.
-- **Conversational Bill Walkthrough:** Transforms static billing statements into interactive, voice-guided summaries available in English or Taglish. It explains the exact reasons for month-over-month cost fluctuations on a line-by-line basis.
-- **"What-If" Watt-Calculator:** An interactive simulator that allows users to ask conversational questions (e.g., "How much will I save this month if I change my AC from $20^{\circ}C$ to $24^{\circ}C$?") to accurately forecast financial savings before making physical adjustments to their appliances.
-- **Peak-Hour Alerts & Load Scheduling:** Integrates with Meralco's grid demand signals to notify users during periods of high grid strain, encouraging mindful consumption.
+### 📄 AI-Powered Bill Scanning
+Scan electricity bills, verify extracted details, and understand charges through an AI-powered walkthrough.
+
+### 🤖 Tanong AI Assistant
+Ask energy-related questions and receive personalized explanations in English or Taglish.
+
+### ⚡ Smart and Analog Meter Support
+Monitor smart meter consumption or manually record analog meter readings.
+
+### 💰 Budget and Energy Monitoring
+Track electricity expenses, analyze consumption trends, and receive budget warnings.
+
+### 🔌 Smart Plug Simulator
+Monitor appliance consumption, control simulated devices, and schedule usage.
+
+### 🔔 Peak-Hour Alerts
+Receive energy-saving suggestions, budget notifications, and appliance reminders.
+
+### 👤 Personalized Experience
+Manage your account with accessible navigation, customizable themes, and text scaling.
 
 ## 🎯 Target Beneficiaries
 
