@@ -1,26 +1,43 @@
 {
   "expo": {
-    "name": "KuryenTipid",
-    "slug": "kuryentipid",
+    "name": "TeamOhmMyGrid",
+    "slug": "TeamOhmMyGrid",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#0F62FE"
-    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0F62FE"
-      }
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "kuryentipid",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow KuryenTipid to record voice queries for Tipi."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow KuryenTipid to select Meralco bill photos.",
+          "cameraPermission": "Allow KuryenTipid to take photos of Meralco bills."
+        }
+      ],
+      "expo-asset"
+    ]
   }
 }
-
