@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Animated,
   Pressable,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,12 +18,13 @@ import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { BudgetGauge } from '../../components/BudgetGauge';
 import { UsageAnalysisCard } from '../../components/UsageAnalysisCard';
-import { TipiMascot } from '../../components/TipiMascot';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { calculateTierCliff } from '../../lib/tariffEngine';
 import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_USER } from '../../constants/mockData';
+
+const APP_LOGO = require('../../../assets/app-logo.png');
 
 /** Smooth fluid spring card wrapper with entrance + press physics */
 function FluidCard({
@@ -228,7 +230,12 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.headerRightGroup}>
-            <TipiMascot size="mini" />
+            <Image
+              source={APP_LOGO}
+              style={styles.headerLogo}
+              resizeMode="contain"
+              accessibilityLabel="Kuryentipid Logo"
+            />
             <HeaderAlertButton from="index" />
             <HeaderSettingsButton />
           </View>
@@ -402,6 +409,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  headerLogo: {
+    width: 40,
+    height: 40,
   },
   quickChipsRow: {
     flexDirection: 'row',
