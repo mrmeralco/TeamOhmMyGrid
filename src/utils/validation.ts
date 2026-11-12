@@ -95,11 +95,13 @@ export function validateEmail(email: string): ValidationRuleResult {
  * - Normalizes away spaces and hyphens (e.g. "1234-5678-90" -> "1234567890")
  */
 export function cleanCAN(can: string): string {
+  if (!can) return '';
   return can.replace(/\D/g, '');
 }
 
 export function formatCANDisplay(can: string): string {
   const digits = cleanCAN(can);
+  if (!digits) return '';
   if (digits.length <= 4) return digits;
   if (digits.length <= 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
   return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8, 10)}`;
@@ -134,11 +136,12 @@ export function validateCAN(can: string): ValidationRuleResult {
  * - Enhanced indicators: Uppercase and special character support
  */
 export function evaluatePassword(password: string): PasswordScore {
-  const hasMinLength = password.length >= 8;
-  const hasLetter = /[a-zA-Z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasUppercase = /[A-Z]/.test(password);
-  const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
+  const pwd = password || '';
+  const hasMinLength = pwd.length >= 8;
+  const hasLetter = /[a-zA-Z]/.test(pwd);
+  const hasNumber = /[0-9]/.test(pwd);
+  const hasUppercase = /[A-Z]/.test(pwd);
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(pwd);
 
   let score = 0;
   if (hasMinLength) score++;
@@ -205,7 +208,7 @@ export function validateConfirmPassword(password: string, confirmPassword: strin
  * Allows logging in via Username, Email, OR CAN (Customer Account Number)
  */
 export function detectIdentifierType(input: string): IdentifierType {
-  const trimmed = input.trim();
+  const trimmed = (input || '').trim();
   const digits = cleanCAN(trimmed);
 
   // Email check
@@ -214,7 +217,7 @@ export function detectIdentifierType(input: string): IdentifierType {
   }
 
   // 10-digit CAN check
-  if (digits.length === 10 && (trimmed.length === 10 || /^\d{4}-\d{4}-\d{2}$/.test(trimmed))) {
+  if (digits.length === 10 && (trimmed.length === 10 || /^\d{4}-\d{4}-\d{2}$/.test(trimmed) || /^\d{4}\s\d{4}\s\d{2}$/.test(trimmed))) {
     return 'can';
   }
 

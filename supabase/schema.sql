@@ -344,7 +344,7 @@ BEGIN
         WHERE lower(email) = v_lower;
 
     -- Case 2: Exact 10-digit CAN format
-    ELSIF length(v_clean_can) = 10 AND (v_trimmed ~ '^[0-9]{10}$' OR v_trimmed ~ '^[0-9]{4}-[0-9]{4}-[0-9]{2}$') THEN
+    ELSIF length(v_clean_can) = 10 AND (v_trimmed ~ '^[0-9]{10}$' OR v_trimmed ~ '^[0-9]{4}-[0-9]{4}-[0-9]{2}$' OR v_trimmed ~ '^[0-9]{4} [0-9]{4} [0-9]{2}$') THEN
         SELECT email, id INTO v_resolved_email, v_user_id
         FROM public.profiles
         WHERE can = v_clean_can;
@@ -493,6 +493,22 @@ BEGIN
 END;
 $$;
 
+-- 7.6 Check Username Availability
+CREATE OR REPLACE FUNCTION public.check_username_available(
+    p_username TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    RETURN NOT EXISTS (
+        SELECT 1 FROM public.profiles WHERE lower(username) = lower(trim(p_username))
+    );
+END;
+$$;
+
 -- ==============================================================================
 -- 8. Supabase Auth Trigger (Handles new user registration)
 -- Automatically copies verified user metadata from auth.users into public.profiles
@@ -509,6 +525,7 @@ DECLARE
     v_username TEXT;
     v_can TEXT;
     v_clean_can TEXT;
+    v_lookup JSONB;
 BEGIN
     -- Extract metadata supplied during registration
     v_full_name := trim(NEW.raw_user_meta_data->>'full_name');
@@ -516,13 +533,12 @@ BEGIN
     v_can       := trim(NEW.raw_user_meta_data->>'can');
     v_clean_can := regexp_replace(v_can, '\D', '', 'g');
 
-    -- If CAN was not passed in metadata, lookup pre-registered CAN by email
+    -- If CAN was not passed in metadata, lookup pre-registered CAN by email or allocate one
     IF v_clean_can IS NULL OR length(v_clean_can) <> 10 THEN
-        SELECT can INTO v_clean_can
-        FROM public.meralco_customers
-        WHERE lower(email) = lower(NEW.email)
-          AND can NOT IN (SELECT can FROM public.profiles)
-        LIMIT 1;
+        v_lookup := public.get_meralco_customer_by_email(NEW.email, v_full_name);
+        IF (v_lookup->>'found')::boolean THEN
+            v_clean_can := v_lookup->>'can';
+        END IF;
     END IF;
 
     -- Server-side validation assertions

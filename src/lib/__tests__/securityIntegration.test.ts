@@ -214,5 +214,37 @@ describe('Security & Auth Integration Tests', () => {
       expect(pending?.can).toBe(can);
       expect(formatCANDisplay(pending!.can!)).toBe('1234-5678-91');
     });
+
+    it('does not steal or reassign another user pre-registered CAN when allocating for an unseeded email', async () => {
+      // Allocate CAN for a new unseeded email
+      const unseeded = await getLinkedCANForEmail('unseeded.resident@example.com', 'Unseeded Resident');
+      expect(unseeded.can).toBeDefined();
+      expect(unseeded.can).toHaveLength(10);
+      // It must NOT steal Jaeda's pre-registered CAN (1234567891) or Nena's (1234567890)
+      expect(unseeded.can).not.toBe('1234567891');
+      expect(unseeded.can).not.toBe('1234567890');
+
+      // Jaeda should still be linked to her own pre-registered CAN
+      const jaeda = await getLinkedCANForEmail('jaeda.iral@teamohmygrid.ph', 'Jaeda Marthena Iral');
+      expect(jaeda.can).toBe('1234567891');
+      expect(jaeda.customer.accountHolderName).toBe('Jaeda Marthena Iral');
+    });
+
+    it('clears pending email verification state on resetDatabaseToSeed', async () => {
+      await AsyncStorage.setItem(
+        '@kuryentipid_pending_email_verification',
+        JSON.stringify({ email: 'cleanup.test@example.com', sentAt: Date.now(), can: '1234567891' })
+      );
+      expect(await getPendingEmailVerification()).not.toBeNull();
+
+      await resetDatabaseToSeed();
+      expect(await getPendingEmailVerification()).toBeNull();
+    });
+
+    it('handles empty or undefined CAN gracefully in formatCANDisplay and cleanCAN without throwing', () => {
+      expect(formatCANDisplay('')).toBe('');
+      expect(formatCANDisplay(undefined as any)).toBe('');
+      expect(formatCANDisplay('1234567890')).toBe('1234-5678-90');
+    });
   });
 });

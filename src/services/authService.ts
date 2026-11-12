@@ -515,13 +515,14 @@ export async function getLinkedCANForEmail(
       }
     }
 
-    // Otherwise, find an available CAN from default records that passes verification
-    for (const rec of DEFAULT_CUSTOMER_RECORDS) {
-      const canCheck = await verifyCANRecord(rec.can, fullName);
+    // Otherwise, check if any unassigned CAN (no email attached) is available in default records
+    const unassignedRec = DEFAULT_CUSTOMER_RECORDS.find((rec) => !rec.email || rec.email.trim() === '');
+    if (unassignedRec) {
+      const canCheck = await verifyCANRecord(unassignedRec.can, fullName);
       if (canCheck.valid) {
         return {
-          can: rec.can,
-          customer: { ...(canCheck.customer || rec), email: normEmail },
+          can: unassignedRec.can,
+          customer: { ...(canCheck.customer || unassignedRec), email: normEmail },
         };
       }
     }
@@ -600,12 +601,18 @@ export async function checkUsernameUnique(username: string): Promise<boolean> {
 
   if (isLiveSupabaseConfigured() && supabase) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase.rpc('check_username_available', {
+        p_username: norm,
+      });
+      if (!error && typeof data === 'boolean') {
+        return data;
+      }
+      const { data: row } = await supabase
         .from('profiles')
         .select('id')
         .ilike('username', norm)
         .maybeSingle();
-      return !data;
+      return !row;
     } catch {
       // fallback
     }
@@ -749,25 +756,47 @@ export async function getPendingEmailVerification(): Promise<{ email: string; se
 
 export async function resendRegistrationOTP(email: string): Promise<void> {
   if (!supabase) throw new Error('Email verification is not configured.');
-  const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
+  const normEmail = email.trim().toLowerCase();
+  const { error } = await supabase.auth.resend({ type: 'signup', email: normEmail });
   if (error) throw error;
-  await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ email: email.trim().toLowerCase(), sentAt: Date.now() }));
+  const existing = await getPendingEmailVerification();
+  const can = existing?.email.toLowerCase() === normEmail ? existing.can : undefined;
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.PENDING_EMAIL,
+    JSON.stringify({ email: normEmail, sentAt: Date.now(), ...(can ? { can } : {}) })
+  );
 }
 
 export async function confirmRegistrationOTP(email: string, token: string): Promise<UserProfile> {
   if (!supabase) throw new Error('Email verification is not configured.');
   if (!/^\d{6}$/.test(token)) throw new Error('Enter the 6-digit code from your email.');
-  const { data, error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token, type: 'email' });
+  const normEmail = email.trim().toLowerCase();
+  const { data, error } = await supabase.auth.verifyOtp({ email: normEmail, token, type: 'email' });
   if (error || !data.session || !data.user?.email_confirmed_at) {
     throw new Error('The code is incorrect or expired. Try again or request a new code.');
   }
-  const { data: row, error: profileError } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
-  if (profileError || !row) throw new Error('Email verified, but your profile could not be loaded. Please log in.');
+  let row: any = null;
+  try {
+    const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+    row = profileRow;
+  } catch {
+    // fallback
+  }
+  const can = row?.can || (data.user.user_metadata?.can as string) || '';
+  const fullName = row?.full_name || (data.user.user_metadata?.full_name as string) || 'Customer';
+  const username = row?.username || (data.user.user_metadata?.username as string) || normEmail.split('@')[0];
+
   const profile: UserProfile = {
-    id: data.user.id, email: data.user.email!, fullName: row.full_name,
-    username: row.username, can: row.can, sin: formatCANDisplay(row.can),
-    householdMembers: row.household_size || 5, majorAppliances: [],
-    monthlyBudget: row.monthly_budget || 3500, createdAt: row.created_at,
+    id: data.user.id,
+    email: data.user.email || normEmail,
+    fullName,
+    username,
+    can,
+    sin: formatCANDisplay(can),
+    householdMembers: row?.household_size || 5,
+    majorAppliances: [],
+    monthlyBudget: row?.monthly_budget || 3500,
+    createdAt: row?.created_at || new Date().toISOString(),
     isEmailVerified: true,
   };
   await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(profile));
@@ -960,6 +989,8 @@ export async function resetDatabaseToSeed(): Promise<void> {
   await AsyncStorage.removeItem(STORAGE_KEYS.USERS);
   await AsyncStorage.removeItem(STORAGE_KEYS.RATE_LIMITS);
   await AsyncStorage.removeItem(STORAGE_KEYS.AUDIT_LOG);
+  await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_EMAIL);
+  await AsyncStorage.removeItem(STORAGE_KEYS.OTP_STORE);
   await AsyncStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(DEFAULT_CUSTOMER_RECORDS));
   await AsyncStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(DEFAULT_STORED_USERS));
 }
