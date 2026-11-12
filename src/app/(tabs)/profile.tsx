@@ -13,16 +13,20 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { TEAM_INFO, MOCK_USER } from '../../constants/mockData';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { theme, fontScale } = useTheme();
+  const { user, logout } = useAuth();
   const {
     budget,
     setBudget,
@@ -89,11 +93,30 @@ export default function ProfileScreen() {
     setEditingNameText('');
   };
 
+  const handleLogout = () => {
+    const perform = async () => {
+      triggerHaptic();
+      await logout();
+      router.replace('/login');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Sigurado ka bang nais mong mag-log out sa KuryenTipid?')) {
+        perform();
+      }
+    } else {
+      Alert.alert('Mag-log out', 'Sigurado ka bang nais mong mag-log out sa KuryenTipid?', [
+        { text: 'Kanselahin', style: 'cancel' },
+        { text: 'Mag-log out', style: 'destructive', onPress: perform },
+      ]);
+    }
+  };
+
   const currentCan = activeCanProfile || {
     id: 'can-1',
     name: 'Bahay (Pasig)',
-    accountNumber: activeBill?.customerAccountNumber || MOCK_USER.accountNumber,
-    customerName: MOCK_USER.name,
+    accountNumber: user?.can || activeBill?.customerAccountNumber || MOCK_USER.accountNumber,
+    customerName: user?.fullName || MOCK_USER.name,
     serviceAddress: MOCK_USER.serviceAddress,
     ratePerKwh: MOCK_USER.ratePerKwh,
     budget,
@@ -260,6 +283,24 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+
+        {/* Logout Action */}
+        <TouchableOpacity
+          style={[styles.logoutBtn, { borderColor: '#fca5a5', backgroundColor: '#fef2f2' }]}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Mag-log out sa KuryenTipid"
+        >
+          <Text style={[styles.logoutBtnText, { fontSize: 14 * fontScale }]}>
+            🚪 Mag-log out sa Account
+          </Text>
+          {user ? (
+            <Text style={[styles.logoutSubText, { fontSize: 11 * fontScale }]}>
+              Naka-login bilang {user.fullName || user.username}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -593,6 +634,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   renameCancelText: { fontWeight: '600' },
+  logoutBtn: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
+    gap: 4,
+  },
+  logoutBtnText: {
+    color: '#b91c1c',
+    fontWeight: '800',
+  },
+  logoutSubText: {
+    color: '#991b1b',
+    fontWeight: '500',
+  },
   canList: { gap: 8 },
   canItemCard: {
     flexDirection: 'row',

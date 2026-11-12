@@ -1,18 +1,50 @@
 import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import { EnergyProvider } from '../context/EnergyContext';
 import { initNotificationHandler, registerDailyPeakAlerts } from '../lib/notificationService';
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
+  const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
     initNotificationHandler();
     registerDailyPeakAlerts();
   }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const currentRoute = segments[0] as string | undefined;
+    const inAuthGroup = currentRoute === 'login' || currentRoute === 'register';
+
+    if (!user && !inAuthGroup) {
+      router.replace('/login');
+    } else if (user && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [user, isLoading, segments]);
+
+  if (isLoading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: theme.bg,
+        }}
+      >
+        <ActivityIndicator size="large" color="#D95200" />
+      </View>
+    );
+  }
 
   return (
     <>
@@ -24,6 +56,8 @@ function AppNavigator() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="register" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen
           name="whatif"
           options={{
@@ -40,9 +74,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <EnergyProvider>
-          <AppNavigator />
-        </EnergyProvider>
+        <AuthProvider>
+          <EnergyProvider>
+            <AppNavigator />
+          </EnergyProvider>
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
