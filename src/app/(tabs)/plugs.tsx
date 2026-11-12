@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
@@ -18,6 +19,7 @@ import { SmartPlugDevice, SmartPlugSchedule } from '../../types';
 import { isScheduleActiveNow } from '../../lib/smartPlugSimulator';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
+import { PageTransitionView } from '../../components/PageTransitionView';
 
 // Appliance SVG Icons
 const ApplianceIcon: React.FC<{ iconId: string; color: string; size?: number }> = ({
@@ -262,48 +264,49 @@ export default function SmartPlugsScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Top Header */}
-        <View style={styles.topHeader}>
-          <View style={styles.headerTextGroup}>
-            <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale }]}>
-              Mga Smart Plug
-            </Text>
-            <Text style={[styles.subTitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
-              Live IoT Telemetry & Relay Control
-            </Text>
-          </View>
-
-          <View style={styles.headerRightGroup}>
-            <View
-              style={[
-                styles.liveSimBadge,
-                {
-                  backgroundColor: isPlugConnected ? theme.okBg : theme.cont,
-                  borderColor: isPlugConnected ? theme.ok : theme.line,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.liveDot,
-                  { backgroundColor: isPlugConnected ? theme.ok : theme.brand },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.liveSimText,
-                  { color: isPlugConnected ? theme.ok : theme.muted, fontSize: 10 * fontScale },
-                ]}
-              >
-                {isPlugConnected ? 'HARDWARE' : 'SIMULATOR'}
+      <PageTransitionView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Top Header */}
+          <View style={styles.topHeader}>
+            <View style={styles.headerTextGroup}>
+              <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
+                Mga Smart <Text style={{ color: '#FF6B00' }}>Plug</Text>
+              </Text>
+              <Text style={[styles.subTitle, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
+                Live IoT Telemetry & Relay Control
               </Text>
             </View>
 
-            <HeaderAlertButton from="plugs" />
-            <HeaderSettingsButton />
+            <View style={styles.headerRightGroup}>
+              <View
+                style={[
+                  styles.liveSimBadge,
+                  {
+                    backgroundColor: isPlugConnected ? theme.okBg : '#FF6B0014',
+                    borderColor: isPlugConnected ? theme.ok : '#FF6B0033',
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.liveDot,
+                    { backgroundColor: isPlugConnected ? theme.ok : '#FF5500' },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.liveSimText,
+                    { color: isPlugConnected ? theme.ok : '#D95200', fontSize: 10 * fontScale, fontFamily: 'Coolvetica' },
+                  ]}
+                >
+                  {isPlugConnected ? 'HARDWARE' : 'SIMULATOR'}
+                </Text>
+              </View>
+
+              <HeaderAlertButton from="plugs" />
+              <HeaderSettingsButton />
+            </View>
           </View>
-        </View>
 
         {/* Master Telemetry Hero Card */}
         <View
@@ -311,22 +314,28 @@ export default function SmartPlugsScreen() {
             styles.masterHeroCard,
             {
               backgroundColor: theme.surface,
-              borderColor: theme.line,
-              shadowColor: theme.ink,
+              borderColor: '#FF6B0030',
+              shadowColor: '#FF6B00',
             },
           ]}
         >
+          <LinearGradient
+            colors={['#FF6B000C', '#FFA04014']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
+          />
           <View style={styles.masterTopRow}>
             <View>
               <View style={styles.masterWattsRow}>
-                <Text style={[styles.masterWattsValue, { color: theme.brand, fontSize: 34 * fontScale }]}>
+                <Text style={[styles.masterWattsValue, { color: '#FF4D26', fontSize: 34 * fontScale, fontFamily: 'Coolvetica' }]}>
                   {totalActiveWatts.toLocaleString(undefined, { minimumFractionDigits: 1 })}
                 </Text>
-                <Text style={[styles.masterWattsUnit, { color: theme.brand, fontSize: 18 * fontScale }]}>
+                <Text style={[styles.masterWattsUnit, { color: '#FF6B00', fontSize: 18 * fontScale, fontFamily: 'Coolvetica' }]}>
                   W
                 </Text>
               </View>
-              <Text style={[styles.masterSubtext, { color: theme.muted, fontSize: 12 * fontScale }]}>
+              <Text style={[styles.masterSubtext, { color: theme.muted, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
                 Kabuuang konsumo ng mga saksakan
               </Text>
             </View>
@@ -336,8 +345,8 @@ export default function SmartPlugsScreen() {
                 style={[
                   styles.activeCountBadge,
                   {
-                    backgroundColor: activeCount > 0 ? theme.okBg : theme.cont,
-                    borderColor: activeCount > 0 ? theme.ok : theme.line,
+                    backgroundColor: activeCount > 0 ? '#10B9811A' : theme.cont,
+                    borderColor: activeCount > 0 ? '#10B981' : theme.line,
                   },
                 ]}
               >
@@ -345,15 +354,16 @@ export default function SmartPlugsScreen() {
                   <View
                     style={[
                       styles.activeDotBeacon,
-                      { backgroundColor: activeCount > 0 ? theme.ok : theme.muted },
+                      { backgroundColor: activeCount > 0 ? '#10B981' : theme.muted },
                     ]}
                   />
                   <Text
                     style={[
                       styles.activeCountText,
                       {
-                        color: activeCount > 0 ? theme.ok : theme.muted,
+                        color: activeCount > 0 ? '#10B981' : theme.muted,
                         fontSize: 12 * fontScale,
+                        fontFamily: 'Coolvetica',
                       },
                     ]}
                   >
@@ -365,9 +375,9 @@ export default function SmartPlugsScreen() {
           </View>
 
           {/* Aggregate Stats Row */}
-          <View style={[styles.masterStatsRow, { borderTopColor: theme.line }]}>
+          <View style={[styles.masterStatsRow, { borderTopColor: '#FF6B0018' }]}>
             <View style={styles.masterStatCol}>
-              <Text style={[styles.statValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
+              <Text style={[styles.statValue, { color: theme.ink, fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
                 {totalKwh} kWh
               </Text>
               <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
@@ -375,10 +385,10 @@ export default function SmartPlugsScreen() {
               </Text>
             </View>
 
-            <View style={[styles.masterDivider, { backgroundColor: theme.line }]} />
+            <View style={[styles.masterDivider, { backgroundColor: '#FF6B0024' }]} />
 
             <View style={styles.masterStatCol}>
-              <Text style={[styles.statValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
+              <Text style={[styles.statValue, { color: '#FF6B00', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
                 ₱{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
               <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
@@ -386,10 +396,10 @@ export default function SmartPlugsScreen() {
               </Text>
             </View>
 
-            <View style={[styles.masterDivider, { backgroundColor: theme.line }]} />
+            <View style={[styles.masterDivider, { backgroundColor: '#FF6B0024' }]} />
 
             <View style={styles.masterStatCol}>
-              <Text style={[styles.statValue, { color: theme.ok, fontSize: 15 * fontScale }]}>
+              <Text style={[styles.statValue, { color: '#10B981', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
                 {avgVoltage} V
               </Text>
               <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
@@ -403,7 +413,7 @@ export default function SmartPlugsScreen() {
             <TouchableOpacity
               style={[
                 styles.masterBtn,
-                { backgroundColor: theme.cont, borderColor: theme.line },
+                { backgroundColor: theme.surface, borderColor: '#FF6B0033' },
               ]}
               onPress={() => handleMasterTurnAll('OFF')}
               accessibilityRole="button"
@@ -412,7 +422,7 @@ export default function SmartPlugsScreen() {
               <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
                 <Rect x="4" y="4" width="16" height="16" rx="3" stroke={theme.ink} strokeWidth="2.5" />
               </Svg>
-              <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 12 * fontScale }]}>
+              <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
                 I-OFF Lahat
               </Text>
             </TouchableOpacity>
@@ -420,16 +430,16 @@ export default function SmartPlugsScreen() {
             <TouchableOpacity
               style={[
                 styles.masterBtn,
-                { backgroundColor: theme.brand, borderColor: theme.brand },
+                { backgroundColor: '#FF5500', borderColor: '#FF5500' },
               ]}
               onPress={() => handleMasterTurnAll('ON')}
               accessibilityRole="button"
               accessibilityLabel="Buksan ang lahat ng smart plug"
             >
               <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
-                <Path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill={theme.brandInk} />
+                <Path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="#ffffff" />
               </Svg>
-              <Text style={[styles.masterBtnText, { color: theme.brandInk, fontSize: 12 * fontScale }]}>
+              <Text style={[styles.masterBtnText, { color: '#ffffff', fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
                 I-ON Lahat
               </Text>
             </TouchableOpacity>
@@ -454,8 +464,8 @@ export default function SmartPlugsScreen() {
               style={[
                 styles.filterPill,
                 {
-                  backgroundColor: activeFilter === f.key ? theme.brand : theme.surface,
-                  borderColor: activeFilter === f.key ? theme.brand : theme.line,
+                  backgroundColor: activeFilter === f.key ? '#FF5500' : theme.surface,
+                  borderColor: activeFilter === f.key ? '#FF5500' : '#FF6B002B',
                 },
               ]}
               onPress={() => setActiveFilter(f.key as any)}
@@ -464,8 +474,9 @@ export default function SmartPlugsScreen() {
                 style={[
                   styles.filterPillText,
                   {
-                    color: activeFilter === f.key ? theme.brandInk : theme.ink,
+                    color: activeFilter === f.key ? '#ffffff' : theme.ink,
                     fontSize: 12 * fontScale,
+                    fontFamily: 'Coolvetica',
                   },
                 ]}
               >
@@ -883,6 +894,7 @@ export default function SmartPlugsScreen() {
 
         <View style={{ height: 110 }} />
       </ScrollView>
+    </PageTransitionView>
 
       {/* Custom Timer Dialog Modal */}
       <Modal
@@ -1104,8 +1116,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   headerTextGroup: { flex: 1 },
-  title: { fontWeight: '800' },
-  subTitle: { fontWeight: '600', marginTop: 2 },
+  title: { fontWeight: '400', letterSpacing: 0.2 },
+  subTitle: { fontWeight: '400', letterSpacing: 0.4, marginTop: 2 },
   headerRightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1155,10 +1167,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   masterWattsValue: {
-    fontWeight: '900',
+    fontWeight: '400',
+    letterSpacing: 0.4,
   },
   masterWattsUnit: {
-    fontWeight: '800',
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   masterRightPillGroup: {
     alignItems: 'flex-end',

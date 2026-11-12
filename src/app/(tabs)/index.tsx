@@ -64,7 +64,7 @@ function FluidCard({
     if (!onPress) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
+    } catch { }
     Animated.spring(scale, {
       toValue: 0.965,
       damping: 14,
@@ -96,70 +96,6 @@ function FluidCard({
         ]}
       >
         {children}
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-/** Fluid Pill Button for quick actions */
-function QuickPill({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  onPress: () => void;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const { theme, fontScale } = useTheme();
-
-  const handlePressIn = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
-    Animated.spring(scale, {
-      toValue: 0.92,
-      damping: 12,
-      stiffness: 300,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      damping: 10,
-      stiffness: 200,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-    >
-      <Animated.View
-        style={[
-          styles.quickPill,
-          {
-            backgroundColor: theme.surface,
-            borderColor: '#FF6B002B',
-            transform: [{ scale }],
-          },
-        ]}
-      >
-        <Text style={{ fontSize: 16 }}>{icon}</Text>
-        <Text
-          style={[
-            styles.quickPillText,
-            { color: theme.ink, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' },
-          ]}
-        >
-          {label}
-        </Text>
       </Animated.View>
     </Pressable>
   );
@@ -241,25 +177,6 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
-        {/* Quick Action Chips Bar */}
-        <View style={styles.quickChipsRow}>
-          <QuickPill
-            icon="⚡"
-            label={isEnglish ? 'Peak Hours' : 'Peak Alert'}
-            onPress={() => router.push('/(tabs)/bill')}
-          />
-          <QuickPill
-            icon="💬"
-            label="Tipi AI"
-            onPress={() => router.push('/(tabs)/tanong')}
-          />
-          <QuickPill
-            icon="🔌"
-            label={isEnglish ? 'Appliances' : 'Kagamitan'}
-            onPress={() => router.push('/(tabs)/appliances')}
-          />
-        </View>
-
         {/* Budget Circular Gauge Card */}
         <FluidCard delay={80}>
           <BudgetGauge projected={projected} budget={budget} />
@@ -280,7 +197,6 @@ export default function HomeScreen() {
               style={[StyleSheet.absoluteFill, { borderRadius: 16 }]}
             />
             <View style={styles.metricTopBadge}>
-              <Text style={{ fontSize: 14 }}>⚡</Text>
               <Text style={[styles.metricLabel, { color: '#FF6B00', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
                 {isEnglish ? 'CONSUMPTION' : 'KONSUMO'}
               </Text>
@@ -298,7 +214,6 @@ export default function HomeScreen() {
               style={[StyleSheet.absoluteFill, { borderRadius: 16 }]}
             />
             <View style={styles.metricTopBadge}>
-              <Text style={{ fontSize: 14 }}>🏷️</Text>
               <Text style={[styles.metricLabel, { color: '#FF6B00', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
                 {isEnglish ? 'CURRENT RATE' : 'RATE / KWH'}
               </Text>
@@ -413,29 +328,6 @@ const styles = StyleSheet.create({
   headerLogo: {
     width: 40,
     height: 40,
-  },
-  quickChipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginVertical: 4,
-  },
-  quickPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  quickPillText: {
-    fontWeight: '400',
-    letterSpacing: 0.4,
   },
   metricsRow: {
     flexDirection: 'row',

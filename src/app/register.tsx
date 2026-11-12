@@ -1,8 +1,10 @@
-﻿import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { EmailDeliveryModal } from '../components/EmailDeliveryModal';
 import { SeedAccountsModal } from '../components/SeedAccountsModal';
+import { PageTransitionView } from '../components/PageTransitionView';
 import { isLiveSupabaseConfigured } from '../config/supabase';
 import { useAuth } from '../context/AuthContext';
 import { confirmRegistrationOTP, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
@@ -142,12 +144,13 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <Text style={styles.brand}>KuryenTipid</Text>
-          <Text style={styles.step}>{verificationOpen ? 'STEP 2 OF 2' : 'STEP 1 OF 2'}</Text>
-          <Text style={styles.title}>{verificationOpen ? 'Check your email' : 'Create your account'}</Text>
-          <Text style={styles.subtitle}>{verificationOpen ? 'Enter the 6-digit verification code for' : 'Start managing your household electricity.'}</Text>
+      <PageTransitionView style={{ flex: 1, width: '100%' }}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            <Text style={styles.brand}>Kuryen<Text style={{ color: '#FF4D26' }}>Tipid</Text></Text>
+            <Text style={styles.step}>{verificationOpen ? 'STEP 2 OF 2' : 'STEP 1 OF 2'}</Text>
+            <Text style={styles.title}>{verificationOpen ? 'Check your email' : 'Create your account'}</Text>
+            <Text style={styles.subtitle}>{verificationOpen ? 'Enter the 6-digit verification code for' : 'Start managing your household electricity.'}</Text>
           {verificationOpen && <Text style={styles.email}>{pendingEmail}</Text>}
           {verificationOpen && !!registeredUser?.can && (
             <View style={styles.canBadgeContainer}>
@@ -163,6 +166,14 @@ export default function RegisterScreen() {
               <Text style={styles.helper}>Check your spam folder if the email is missing.</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={styles.helper}>{notice}</Text>}
               <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || code.length !== 6) && styles.disabled]} disabled={busy || code.length !== 6} onPress={verify}>
+                {!(busy || code.length !== 6) && (
+                  <LinearGradient
+                    colors={['#FF4D26', '#FF6B00']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+                  />
+                )}
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify email</Text>}
               </TouchableOpacity>
               <TouchableOpacity accessibilityRole="button" style={styles.link} disabled={busy || remaining > 0} onPress={resend}>
@@ -194,7 +205,15 @@ export default function RegisterScreen() {
                 <Text style={styles.demoAccountsBtnText}>⚡ Demo Meralco Accounts (Quick Fill)</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || !configured) && styles.disabled]} disabled={busy || !configured} onPress={submit}>
+              <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || !configured) && styles.disabled]} disabled={busy || !configured} onPress={submit} activeOpacity={0.88}>
+                {!(busy || !configured) && (
+                  <LinearGradient
+                    colors={['#FF4D26', '#FF6B00']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+                  />
+                )}
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{configured ? 'Send verification code' : 'Email delivery unavailable'}</Text>}
               </TouchableOpacity>
               {!!pendingEmail && <TouchableOpacity accessibilityRole="button" style={styles.link} disabled={busy} onPress={() => { setVerificationOpen(true); setError(''); }}><Text style={styles.linkText}>Continue email verification</Text></TouchableOpacity>}
@@ -205,7 +224,8 @@ export default function RegisterScreen() {
         <EmailDeliveryModal visible={showCAN} user={registeredUser} onProceed={() => { setShowCAN(false); router.replace('/(tabs)'); }} />
         <SeedAccountsModal visible={seedModalVisible} onClose={() => setSeedModalVisible(false)} onSelectAccount={handleSelectSeedAccount} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </PageTransitionView>
+  </KeyboardAvoidingView>
   );
 }
 
@@ -214,9 +234,9 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, width: '100%' },
   content: { flexGrow: 1, width: '100%', alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', maxWidth: 440, backgroundColor: '#fff', borderRadius: 28, padding: 28, borderWidth: 1, borderColor: '#f1e8df' },
-  brand: { color: '#ea580c', fontSize: 17, fontWeight: '800', marginBottom: 24 },
-  step: { color: '#64748b', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8 },
-  title: { color: '#0f172a', fontSize: 27, fontWeight: '800', marginBottom: 8 },
+  brand: { color: '#FF6B00', fontSize: 17, fontWeight: '400', fontFamily: 'Coolvetica', marginBottom: 24 },
+  step: { color: '#64748b', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8, fontFamily: 'Coolvetica' },
+  title: { color: '#0f172a', fontSize: 27, fontWeight: '400', fontFamily: 'Coolvetica', marginBottom: 8 },
   subtitle: { color: '#64748b', fontSize: 14, lineHeight: 21, marginBottom: 24 },
   email: { color: '#0f172a', fontSize: 15, fontWeight: '600', marginBottom: 24, marginTop: -16 },
   canBadgeContainer: {
@@ -237,7 +257,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   field: { marginBottom: 15 },
-  label: { color: '#334155', fontSize: 13, fontWeight: '600', marginBottom: 7 },
+  label: { color: '#334155', fontSize: 13, fontWeight: '600', marginBottom: 7, fontFamily: 'Coolvetica' },
   input: { minHeight: 48, width: '100%', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0f172a' },
   inputError: { borderColor: '#dc2626' },
   errorText: { color: '#b91c1c', fontSize: 12, marginTop: 5 },
@@ -246,11 +266,11 @@ const styles = StyleSheet.create({
   helper: { color: '#64748b', fontSize: 12, lineHeight: 18 },
   passwordHelp: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: -8, marginBottom: 15 },
   strengthText: { flex: 1, marginRight: 12 },
-  button: { minHeight: 50, backgroundColor: '#ea580c', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 18 },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  disabled: { backgroundColor: '#cbd5e1' },
+  button: { minHeight: 50, backgroundColor: 'transparent', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 18, overflow: 'hidden' },
+  buttonText: { color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Coolvetica' },
+  disabled: { backgroundColor: '#cbd5e1', overflow: 'hidden' },
   link: { alignItems: 'center', paddingTop: 18 },
-  linkText: { color: '#c2410c', fontSize: 13, fontWeight: '600' },
+  linkText: { color: '#FF5500', fontSize: 13, fontWeight: '400', fontFamily: 'Coolvetica' },
   secondaryLink: { color: '#475569', fontSize: 13 },
   muted: { color: '#64748b' },
   footer: { alignItems: 'center', marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#f1f5f9' },

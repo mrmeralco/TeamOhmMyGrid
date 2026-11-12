@@ -22,6 +22,7 @@ export default function TabsLayout() {
       }}
       screenOptions={{
         headerShown: false,
+        animation: 'fade',
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
