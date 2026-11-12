@@ -59,7 +59,7 @@ export const CustomInput: React.FC<CustomInputProps> = ({
         )}
         {!isChecking && showSuccess && (
           <View style={[styles.statusBadge, styles.badgeSuccess]}>
-            <Text style={styles.badgeSuccessText}>✓ Valid</Text>
+            <Text style={styles.badgeSuccessText}>Valid</Text>
           </View>
         )}
       </View>
@@ -94,7 +94,7 @@ export const CustomInput: React.FC<CustomInputProps> = ({
             accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
             activeOpacity={0.7}
           >
-            <Text style={styles.eyeText}>{showPassword ? '🙈 Hide' : '👁️ Show'}</Text>
+            <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -102,14 +102,14 @@ export const CustomInput: React.FC<CustomInputProps> = ({
       {/* Error Message */}
       {hasError && (
         <View style={styles.feedbackRow}>
-          <Text style={styles.errorText}>⚠️ {error}</Text>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
 
       {/* Success details message */}
       {!hasError && success && (
         <View style={styles.feedbackRow}>
-          <Text style={styles.successText}>✓ {success}</Text>
+          <Text style={styles.successText}>{success}</Text>
         </View>
       )}
 

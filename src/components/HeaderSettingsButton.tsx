@@ -19,6 +19,7 @@ export const HeaderSettingsButton: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { theme, mode, setMode, fontScale, setFontScale, language, setLanguage } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const isEnglish = language === 'english';
 
   const triggerHaptic = () => {
     try {
@@ -114,16 +115,16 @@ export const HeaderSettingsButton: React.FC = () => {
             <View style={[styles.headerRow, { borderBottomColor: theme.line }]}>
               <View style={styles.headerLeft}>
                 <Text style={[styles.dropdownTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-                  ⚙️ Mga Setting
+                  {isEnglish ? 'Settings' : 'Mga Setting'}
                 </Text>
                 <Text style={[styles.dropdownSubtitle, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                  Tema, Laki ng Teksto, at Wika
+                  {isEnglish ? 'Theme, Font Size, and Language' : 'Tema, Laki ng Teksto, at Wika'}
                 </Text>
               </View>
               <TouchableOpacity
                 onPress={() => setIsOpen(false)}
                 style={[styles.closeBtn, { backgroundColor: theme.cont }]}
-                accessibilityLabel="Isara ang mga setting"
+                accessibilityLabel={isEnglish ? 'Close settings' : 'Isara ang mga setting'}
               >
                 <Text style={[styles.closeBtnText, { color: theme.ink, fontSize: 14 * fontScale }]}>
                   ✕
@@ -134,7 +135,7 @@ export const HeaderSettingsButton: React.FC = () => {
             {/* Section 1: Tema */}
             <View style={styles.sectionWrap}>
               <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                🎨 Tema (Theme)
+                {isEnglish ? 'Theme' : 'Tema (Theme)'}
               </Text>
               <View style={styles.optionRow}>
                 {[
@@ -176,13 +177,13 @@ export const HeaderSettingsButton: React.FC = () => {
             {/* Section 2: Laki ng Teksto */}
             <View style={styles.sectionWrap}>
               <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                🔤 Laki ng Teksto (Font Size)
+                {isEnglish ? 'Font Size' : 'Laki ng Teksto (Font Size)'}
               </Text>
               <View style={styles.optionRow}>
                 {[
-                  { scale: 1.0, label: '1.0x (Karaniwan)' },
+                  { scale: 1.0, label: isEnglish ? '1.0x (Default)' : '1.0x (Karaniwan)' },
                   { scale: 1.15, label: '1.15x' },
-                  { scale: 1.3, label: '1.30x (Malaki)' },
+                  { scale: 1.3, label: isEnglish ? '1.30x (Large)' : '1.30x (Malaki)' },
                 ].map((s) => {
                   const isSelected = fontScale === s.scale;
                   return (
@@ -218,7 +219,7 @@ export const HeaderSettingsButton: React.FC = () => {
             {/* Section 3: Wika */}
             <View style={styles.sectionWrap}>
               <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                🌐 Wika (Language)
+                {isEnglish ? 'Language' : 'Wika (Language)'}
               </Text>
               <View style={styles.optionRow}>
                 {[

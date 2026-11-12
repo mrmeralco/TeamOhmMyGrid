@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { DEFAULT_CUSTOMER_RECORDS } from '../services/authService';
 import { CustomerRecord } from '../types/auth';
+import { MeterClassificationBadge } from './MeterClassificationBadge';
 
 interface SeedAccountsModalProps {
   visible: boolean;
@@ -63,6 +64,12 @@ export const SeedAccountsModal: React.FC<SeedAccountsModalProps> = ({
                 <Text style={styles.sinText}>SIN (on bill): {item.sin}</Text>
                 <Text style={styles.addressText}>{item.serviceAddress}</Text>
                 <View style={styles.tagRow}>
+                  <MeterClassificationBadge
+                    meterType={item.meterType || 'AMI'}
+                    size="compact"
+                    showIcon={false}
+                    showSubtitle={false}
+                  />
                   <Text style={styles.tag}>Budget: ₱{item.monthlyBudget}</Text>
                   <Text style={styles.tag}>{item.householdMembers} Members</Text>
                 </View>

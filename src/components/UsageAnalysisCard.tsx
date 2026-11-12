@@ -1,13 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Animated,
   Image,
-  Pressable,
+  TouchableOpacity,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
@@ -17,68 +16,6 @@ const TIPI_MASCOT = require('../../assets/tipi-mascot.png');
 export function UsageAnalysisCard() {
   const { fontScale, language } = useTheme();
 
-  // Floating animation for mascot
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const shadowScale = useRef(new Animated.Value(1)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    // Continuous smooth floating loop (sine wave up & down)
-    const floatLoop = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(floatAnim, {
-            toValue: -10,
-            duration: 1600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(shadowScale, {
-            toValue: 0.82,
-            duration: 1600,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(floatAnim, {
-            toValue: 2,
-            duration: 1600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(shadowScale, {
-            toValue: 1.15,
-            duration: 1600,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-    floatLoop.start();
-
-    return () => floatLoop.stop();
-  }, [floatAnim, shadowScale]);
-
-  // Press feedback
-  const handlePressIn = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
-    Animated.spring(pressScale, {
-      toValue: 0.965,
-      friction: 8,
-      tension: 200,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(pressScale, {
-      toValue: 1,
-      friction: 6,
-      tension: 180,
-      useNativeDriver: true,
-    }).start();
-  };
-
   const handleCardPress = () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -86,7 +23,6 @@ export function UsageAnalysisCard() {
     router.push('/(tabs)/tanong');
   };
 
-  // Language options: minimal text & "simulan ang chat dito" for Filipino
   const isFilipino = language === 'filipino';
   const isEnglish = language === 'english';
 
@@ -94,7 +30,7 @@ export function UsageAnalysisCard() {
     ? 'Start chat here'
     : 'Simulan ang\nchat dito';
 
-  const badgeText = isEnglish ? 'TIPI AI' : 'TIPI AI';
+  const badgeText = 'TIPI AI';
 
   const hintText = isEnglish
     ? 'Ask anything about your bill'
@@ -102,87 +38,77 @@ export function UsageAnalysisCard() {
     ? 'Magtanong ukol sa kuryente'
     : 'Ask tips para makatipid';
 
-  const buttonText = isEnglish ? 'Chat now →' : isFilipino ? 'Mag-chat →' : 'Chat na →';
+  const buttonText = isEnglish ? 'Chat now \u2192' : isFilipino ? 'Mag-chat \u2192' : 'Chat na \u2192';
 
   return (
-    <Pressable
+    <TouchableOpacity
       onPress={handleCardPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      activeOpacity={0.9}
       accessibilityRole="button"
-      accessibilityLabel={isFilipino ? 'Simulan ang chat dito kay Tipi' : 'Start chat here with Tipi'}
+      accessibilityLabel={isEnglish ? 'Start chat here with Tipi' : 'Simulan ang chat dito kay Tipi'}
     >
-      <Animated.View style={{ transform: [{ scale: pressScale }] }}>
-        <LinearGradient
-          colors={['#FF4E00', '#FF7000', '#FFA100']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.card}
-        >
-          {/* Decorative glowing circles in background */}
-          <View style={styles.ambientCircleOne} />
-          <View style={styles.ambientCircleTwo} />
+      <View style={styles.card}>
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <SvgGradient id="tipiHeroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor="#FF4E00" />
+              <Stop offset="55%" stopColor="#FF7000" />
+              <Stop offset="100%" stopColor="#FFA100" />
+            </SvgGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" rx="22" ry="22" fill="url(#tipiHeroGrad)" />
+        </Svg>
 
-          {/* Left Text Column: Minimal, punchy */}
-          <View style={styles.textSide}>
-            <View style={styles.badgePill}>
-              <View style={styles.livePulseDot} />
-              <Text style={[styles.badgeText, { fontSize: 11 * fontScale }]}>
-                {badgeText}
-              </Text>
-            </View>
+        {/* Decorative glowing circles in background */}
+        <View style={styles.ambientCircleOne} />
+        <View style={styles.ambientCircleTwo} />
 
-            <Text
-              style={[
-                styles.title,
-                { fontSize: 24 * fontScale, lineHeight: 28 * fontScale },
-              ]}
-              numberOfLines={2}
-            >
-              {titleText}
+        {/* Left Text Column */}
+        <View style={styles.textSide}>
+          <View style={styles.badgePill}>
+            <View style={styles.livePulseDot} />
+            <Text style={[styles.badgeText, { fontSize: 11 * fontScale }]}>
+              {badgeText}
             </Text>
-
-            <Text
-              style={[styles.subtitle, { fontSize: 12 * fontScale }]}
-              numberOfLines={1}
-            >
-              {hintText}
-            </Text>
-
-            {/* Fluid Pill CTA */}
-            <View style={styles.ctaButton}>
-              <Text style={[styles.ctaButtonText, { fontSize: 13 * fontScale }]}>
-                {buttonText}
-              </Text>
-            </View>
           </View>
 
-          {/* Right Avatar Column with Floating Animation */}
-          <View style={styles.mascotContainer}>
-            <Animated.View
-              style={[
-                styles.mascotAnimatedWrapper,
-                { transform: [{ translateY: floatAnim }] },
-              ]}
-            >
-              <Image
-                source={TIPI_MASCOT}
-                style={styles.mascotImage}
-                resizeMode="contain"
-              />
-            </Animated.View>
+          <Text
+            style={[
+              styles.title,
+              { fontSize: 24 * fontScale, lineHeight: 28 * fontScale },
+            ]}
+            numberOfLines={2}
+          >
+            {titleText}
+          </Text>
 
-            {/* Floating shadow that reacts to mascot height */}
-            <Animated.View
-              style={[
-                styles.floatingShadow,
-                { transform: [{ scaleX: shadowScale }] },
-              ]}
+          <Text
+            style={[styles.subtitle, { fontSize: 12 * fontScale }]}
+            numberOfLines={1}
+          >
+            {hintText}
+          </Text>
+
+          <View style={styles.ctaButton}>
+            <Text style={[styles.ctaButtonText, { fontSize: 13 * fontScale }]}>
+              {buttonText}
+            </Text>
+          </View>
+        </View>
+
+        {/* Right Avatar Column (Static, no bounce animation) */}
+        <View style={styles.mascotContainer}>
+          <View style={styles.mascotWrapper}>
+            <Image
+              source={TIPI_MASCOT}
+              style={styles.mascotImage}
+              resizeMode="contain"
             />
           </View>
-        </LinearGradient>
-      </Animated.View>
-    </Pressable>
+          <View style={styles.floatingShadow} />
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -198,6 +124,7 @@ const styles = StyleSheet.create({
     paddingRight: 14,
     paddingVertical: 18,
     position: 'relative',
+    backgroundColor: '#FF6B00',
     shadowColor: '#FF6B00',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
@@ -288,7 +215,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
     height: 140,
   },
-  mascotAnimatedWrapper: {
+  mascotWrapper: {
     width: '100%',
     height: 125,
     alignItems: 'center',

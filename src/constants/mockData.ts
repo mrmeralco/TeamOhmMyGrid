@@ -31,6 +31,9 @@ export const PRESET_CAN_PROFILES: CANProfile[] = [
     ratePerKwh: 11.43,
     budget: 3500,
     currentKwh: 188,
+    meterType: 'AMI',
+    meterSerialNumber: 'MR-AMI-4410',
+    lastReadingDate: '2026-05-14',
     billData: {
       customerAccountNumber: '0192-8823-4410',
       billingPeriod: {
@@ -53,6 +56,9 @@ export const PRESET_CAN_PROFILES: CANProfile[] = [
     ratePerKwh: 11.48,
     budget: 5000,
     currentKwh: 385,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-3321',
+    lastReadingDate: '2026-05-14',
     billData: {
       customerAccountNumber: '0284-9102-3321',
       billingPeriod: {
@@ -75,6 +81,9 @@ export const PRESET_CAN_PROFILES: CANProfile[] = [
     ratePerKwh: 11.43,
     budget: 2500,
     currentKwh: 125,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-5562',
+    lastReadingDate: '2026-05-14',
     billData: {
       customerAccountNumber: '0341-7789-5562',
       billingPeriod: {
@@ -124,7 +133,7 @@ export const MOCK_PEAK_ALERT: MockPeakAlert = {
   isPeak: true,
   alertLevel: 'RED ALERT',
   timeWindow: '2:00 PM – 5:00 PM',
-  title: '⚡ Peak Grid Demand Alert',
+  title: 'Peak Grid Demand Alert',
   subtitle: 'Luzon Grid under high stress today',
   description:
     'Shifting high-draw appliances (Aircon, Plantsa, Washing Machine) after 6:00 PM helps avoid brownouts and saves you up to ₱180 this week.',
@@ -223,28 +232,6 @@ export const MOCK_BILL_BREAKDOWN = {
     { label: 'Transmission Charge (NGCP Grid)', amount: 315.0, percent: 9 },
     { label: 'Government Taxes & Universal Charge', amount: 425.89, percent: 12 },
   ],
-};
-
-export const QUICK_PROMPTS = [
-  'Bakit lumobo ang Aircon ko?',
-  'Himayin ang Bill Line-by-Line 📋',
-  'Paano ako makakatipid ng ₱500?',
-  'Bakit may Peak-Hour Alert ngayon?',
-];
-
-export const BOT_RESPONSES: Record<string, { text: string }> = {
-  'Bakit lumobo ang Aircon ko?': {
-    text: 'Magandang tanong! 🌡️ Ayon sa smart disaggregation data natin:\n\n1. Lumobo ng 20% ang AC usage mo dahil sa 34°C heat index noong nakaraang 2 linggo.\n2. Naka-set ang AC sa 20°C sa loob ng 9 hours bawat gabi.\n\n💡 Tip: Kapag ini-adjust mo ang thermostat sa 24°C at gumamit ng electric fan, pareho pa rin ang lamig pero makakatipid ka agad ng humigit-kumulang ₱482 sa darating na buwan!',
-  },
-  'Himayin ang Bill Line-by-Line 📋': {
-    text: 'Heto ang official breakdown ng ₱3,500 bill mo:\n\n• ⚡ Generation Charge (58%): ₱2,024.11 (Bayad sa power plants, tumaas ng ₱0.32/kWh dahil sa fuel costs sa global market)\n• 🗼 Transmission Charge (9%): ₱315.00 (Bayad sa National Grid)\n• 🔌 Distribution Charge (21%): ₱735.00 (Meralco poles and service—nananatiling fixed ang rate nito)\n• 🏛️ Gov Taxes & Subsidies (12%): ₱425.89 (VAT at Universal Charges)\n\nIbig sabihin, ang pagtaas ay galing sa combination ng mas mataas na generation cost at dagdag na konsumo sa bahay!',
-  },
-  'Paano ako makakatipid ng ₱500?': {
-    text: 'Kayang-kaya natin maabot ang ₱500 savings bago matapos ang billing cycle! Heto ang 3 simpleng hakbang:\n\n1. ❄️ I-set ang Aircon sa 24°C sa halip na 20°C (Savings: ~₱320)\n2. 🔌 I-unplug ang TV box at appliance strips tuwing gabi (Savings: ~₱95)\n3. 🧺 Magplantsa nang sabay-sabay sa umaga bago mag-peak hours (Savings: ~₱110)\n\nKabuuang Projected Tipid: ₱525.00! Gusto mo bang i-activate ko ang AI reminder para dito?',
-  },
-  'Bakit may Peak-Hour Alert ngayon?': {
-    text: '⚠️ Kasalukuyang nakakaranas ang Luzon Grid ng high power demand mula 2:00 PM hanggang 5:00 PM dahil sa init ng panahon.\n\nKapag sumasabay ang maraming appliances sa mga oras na ito, tumataas ang presyo ng kuryente sa WESM (Wholesale Electricity Spot Market) at may panganib ng yellow alert.\n\nKung ipagpapaliban mo ang paggamit ng washing machine at plantsa paglampas ng 6:00 PM, nakakatulong ka sa komunidad at naiiwasan mo ang over-budget!',
-  },
 };
 
 export const TEAM_INFO = {

@@ -202,7 +202,7 @@ export default function RegisterScreen() {
                 onPress={() => setSeedModalVisible(true)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.demoAccountsBtnText}>⚡ Demo Meralco Accounts (Quick Fill)</Text>
+                <Text style={styles.demoAccountsBtnText}>Demo Meralco Accounts (Quick Fill)</Text>
               </TouchableOpacity>
 
               <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || !configured) && styles.disabled]} disabled={busy || !configured} onPress={submit} activeOpacity={0.88}>

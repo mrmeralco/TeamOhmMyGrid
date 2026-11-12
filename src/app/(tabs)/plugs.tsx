@@ -17,6 +17,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useEnergy } from '../../context/EnergyContext';
 import { SmartPlugDevice, SmartPlugSchedule } from '../../types';
 import { isScheduleActiveNow } from '../../lib/smartPlugSimulator';
+import { buildPlugsExplanationPrompt } from '../../lib/geminiService';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { PageTransitionView } from '../../components/PageTransitionView';
@@ -105,7 +106,8 @@ const ApplianceIcon: React.FC<{ iconId: string; color: string; size?: number }> 
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function SmartPlugsScreen() {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
   const {
     smartPlugs,
     totalActiveWatts,
@@ -116,6 +118,7 @@ export default function SmartPlugsScreen() {
     setPlugTimer,
     cancelPlugTimer,
     setPlugSchedule,
+    askTipi,
   } = useEnergy();
 
   // Filter state
@@ -270,7 +273,15 @@ export default function SmartPlugsScreen() {
           <View style={styles.topHeader}>
             <View style={styles.headerTextGroup}>
               <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
-                Mga Smart <Text style={{ color: '#FF6B00' }}>Plug</Text>
+                {isEnglish ? (
+                  <>
+                    Smart <Text style={{ color: '#FF6B00' }}>Plugs</Text>
+                  </>
+                ) : (
+                  <>
+                    Mga <Text style={{ color: '#FF6B00' }}>Smart Plug</Text>
+                  </>
+                )}
               </Text>
               <Text style={[styles.subTitle, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
                 Live IoT Telemetry & Relay Control
@@ -308,593 +319,627 @@ export default function SmartPlugsScreen() {
             </View>
           </View>
 
-        {/* Master Telemetry Hero Card */}
-        <View
-          style={[
-            styles.masterHeroCard,
-            {
-              backgroundColor: theme.surface,
-              borderColor: '#FF6B0030',
-              shadowColor: '#FF6B00',
-            },
-          ]}
-        >
-          <LinearGradient
-            colors={['#FF6B000C', '#FFA04014']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
-          />
-          <View style={styles.masterTopRow}>
-            <View>
-              <View style={styles.masterWattsRow}>
-                <Text style={[styles.masterWattsValue, { color: '#FF4D26', fontSize: 34 * fontScale, fontFamily: 'Coolvetica' }]}>
-                  {totalActiveWatts.toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                </Text>
-                <Text style={[styles.masterWattsUnit, { color: '#FF6B00', fontSize: 18 * fontScale, fontFamily: 'Coolvetica' }]}>
-                  W
-                </Text>
-              </View>
-              <Text style={[styles.masterSubtext, { color: theme.muted, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
-                Kabuuang konsumo ng mga saksakan
-              </Text>
-            </View>
-
-            <View style={styles.masterRightPillGroup}>
-              <View
-                style={[
-                  styles.activeCountBadge,
-                  {
-                    backgroundColor: activeCount > 0 ? '#10B9811A' : theme.cont,
-                    borderColor: activeCount > 0 ? '#10B981' : theme.line,
-                  },
-                ]}
-              >
-                <View style={styles.liveActiveIndicator}>
-                  <View
-                    style={[
-                      styles.activeDotBeacon,
-                      { backgroundColor: activeCount > 0 ? '#10B981' : theme.muted },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.activeCountText,
-                      {
-                        color: activeCount > 0 ? '#10B981' : theme.muted,
-                        fontSize: 12 * fontScale,
-                        fontFamily: 'Coolvetica',
-                      },
-                    ]}
-                  >
-                    {activeCount} ng {smartPlugs.length} Bukás
+          {/* Master Telemetry Hero Card */}
+          <View
+            style={[
+              styles.masterHeroCard,
+              {
+                backgroundColor: theme.surface,
+                borderColor: '#FF6B0030',
+                shadowColor: '#FF6B00',
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={['#FF6B000C', '#FFA04014']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
+            />
+            <View style={styles.masterTopRow}>
+              <View>
+                <View style={styles.masterWattsRow}>
+                  <Text style={[styles.masterWattsValue, { color: '#FF4D26', fontSize: 34 * fontScale, fontFamily: 'Coolvetica' }]}>
+                    {totalActiveWatts.toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                  </Text>
+                  <Text style={[styles.masterWattsUnit, { color: '#FF6B00', fontSize: 18 * fontScale, fontFamily: 'Coolvetica' }]}>
+                    W
                   </Text>
                 </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Aggregate Stats Row */}
-          <View style={[styles.masterStatsRow, { borderTopColor: '#FF6B0018' }]}>
-            <View style={styles.masterStatCol}>
-              <Text style={[styles.statValue, { color: theme.ink, fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
-                {totalKwh} kWh
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Naiipong Enerhiya
-              </Text>
-            </View>
-
-            <View style={[styles.masterDivider, { backgroundColor: '#FF6B0024' }]} />
-
-            <View style={styles.masterStatCol}>
-              <Text style={[styles.statValue, { color: '#FF6B00', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
-                ₱{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Halaga sa Buwan
-              </Text>
-            </View>
-
-            <View style={[styles.masterDivider, { backgroundColor: '#FF6B0024' }]} />
-
-            <View style={styles.masterStatCol}>
-              <Text style={[styles.statValue, { color: '#10B981', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
-                {avgVoltage} V
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                Grid Voltage RMS
-              </Text>
-            </View>
-          </View>
-
-          {/* Quick Master Actions */}
-          <View style={styles.masterActionsRow}>
-            <TouchableOpacity
-              style={[
-                styles.masterBtn,
-                { backgroundColor: theme.surface, borderColor: '#FF6B0033' },
-              ]}
-              onPress={() => handleMasterTurnAll('OFF')}
-              accessibilityRole="button"
-              accessibilityLabel="Patayin ang lahat ng smart plug"
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
-                <Rect x="4" y="4" width="16" height="16" rx="3" stroke={theme.ink} strokeWidth="2.5" />
-              </Svg>
-              <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
-                I-OFF Lahat
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.masterBtn,
-                { backgroundColor: '#FF5500', borderColor: '#FF5500' },
-              ]}
-              onPress={() => handleMasterTurnAll('ON')}
-              accessibilityRole="button"
-              accessibilityLabel="Buksan ang lahat ng smart plug"
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
-                <Path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="#ffffff" />
-              </Svg>
-              <Text style={[styles.masterBtnText, { color: '#ffffff', fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
-                I-ON Lahat
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Filter Pills */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {[
-            { key: 'all', label: `Lahat (${smartPlugs.length})` },
-            { key: 'on', label: `Naka-ON (${activeCount})` },
-            { key: 'off', label: `Naka-OFF (${smartPlugs.length - activeCount})` },
-            { key: 'timer', label: `May Timer (${smartPlugs.filter((p) => p.timer?.active).length})` },
-            { key: 'schedule', label: `Naka-Schedule (${smartPlugs.filter((p) => p.schedule?.enabled).length})` },
-          ].map((f) => (
-            <TouchableOpacity
-              key={f.key}
-              style={[
-                styles.filterPill,
-                {
-                  backgroundColor: activeFilter === f.key ? '#FF5500' : theme.surface,
-                  borderColor: activeFilter === f.key ? '#FF5500' : '#FF6B002B',
-                },
-              ]}
-              onPress={() => setActiveFilter(f.key as any)}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  {
-                    color: activeFilter === f.key ? '#ffffff' : theme.ink,
-                    fontSize: 12 * fontScale,
-                    fontFamily: 'Coolvetica',
-                  },
-                ]}
-              >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Plug Cards List */}
-        <View style={styles.plugsList}>
-          {filteredPlugs.length === 0 ? (
-            <View style={[styles.emptyContainer, { backgroundColor: theme.surface, borderColor: theme.line }]}>
-              <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="9" stroke={theme.muted} strokeWidth="2" />
-                <Path d="M8 12H16" stroke={theme.muted} strokeWidth="2" strokeLinecap="round" />
-              </Svg>
-              <Text style={[styles.emptyTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
-                Walang Smart Plug sa Filter
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
-                Walang saksakan na tumutugma sa kasalukuyang piniling kategorya.
-              </Text>
-              <TouchableOpacity
-                style={[styles.resetFilterBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
-                onPress={() => setActiveFilter('all')}
-              >
-                <Text style={[styles.resetFilterBtnText, { color: theme.brand, fontSize: 13 * fontScale }]}>
-                  Ipakita ang Lahat
+                <Text style={[styles.masterSubtext, { color: theme.muted, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? 'Total active plug power draw' : 'Kabuuang konsumo ng mga saksakan'}
                 </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            filteredPlugs.map((plug) => {
-              const isPlugOn = plug.relayState === 'ON';
-              const isTimerActive = !!plug.timer?.active;
-              const isScheduleEnabled = !!plug.schedule?.enabled;
-              const isScheduleRunningNow = isScheduleActiveNow(plug.schedule);
-              const isExpanded = !!expandedPlugs[plug.id];
+              </View>
 
-              return (
+              <View style={styles.masterRightPillGroup}>
                 <View
-                  key={plug.id}
                   style={[
-                    styles.plugCard,
+                    styles.activeCountBadge,
                     {
-                      backgroundColor: theme.surface,
-                      borderColor: isPlugOn ? theme.brand : theme.line,
-                      shadowColor: theme.ink,
+                      backgroundColor: activeCount > 0 ? '#10B9811A' : theme.cont,
+                      borderColor: activeCount > 0 ? '#10B981' : theme.line,
                     },
                   ]}
                 >
-                  {/* Minimized Plug Card Row: Essential info + arrow */}
-                  <TouchableOpacity
-                    style={[styles.cardHeader, { marginBottom: isExpanded ? 12 : 0 }]}
-                    onPress={() => togglePlugExpand(plug.id)}
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${plug.name}, ${isPlugOn ? 'Naka-ON' : 'Naka-OFF'}, ${plug.powerWatts.toFixed(0)} Watts. ${isExpanded ? 'I-minimize' : 'I-expand'}`}
+                  <View style={styles.liveActiveIndicator}>
+                    <View
+                      style={[
+                        styles.activeDotBeacon,
+                        { backgroundColor: activeCount > 0 ? '#10B981' : theme.muted },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.activeCountText,
+                        {
+                          color: activeCount > 0 ? '#10B981' : theme.muted,
+                          fontSize: 12 * fontScale,
+                          fontFamily: 'Coolvetica',
+                        },
+                      ]}
+                    >
+                      {isEnglish ? `${activeCount} of ${smartPlugs.length} Active` : `${activeCount} ng ${smartPlugs.length} Bukás`}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Aggregate Stats Row */}
+            <View style={[styles.masterStatsRow, { borderTopColor: '#FF6B0018' }]}>
+              <View style={styles.masterStatCol}>
+                <Text style={[styles.statValue, { color: theme.ink, fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {totalKwh} kWh
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                  {isEnglish ? 'Accumulated Energy' : 'Naiipong Enerhiya'}
+                </Text>
+              </View>
+
+              <View style={[styles.masterDivider, { backgroundColor: '#FF6B0024' }]} />
+
+              <View style={styles.masterStatCol}>
+                <Text style={[styles.statValue, { color: '#FF6B00', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  ₱{totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                  {isEnglish ? 'Monthly Cost' : 'Halaga sa Buwan'}
+                </Text>
+              </View>
+
+              <View style={[styles.masterDivider, { backgroundColor: '#FF6B0024' }]} />
+
+              <View style={styles.masterStatCol}>
+                <Text style={[styles.statValue, { color: '#10B981', fontSize: 16 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {avgVoltage} V
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                  Grid Voltage RMS
+                </Text>
+              </View>
+            </View>
+
+            {/* Quick Master Actions */}
+            <View style={styles.masterActionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.masterBtn,
+                  { backgroundColor: theme.surface, borderColor: '#FF6B0033' },
+                ]}
+                onPress={() => handleMasterTurnAll('OFF')}
+                accessibilityRole="button"
+                accessibilityLabel={isEnglish ? 'Turn off all smart plugs' : 'Patayin ang lahat ng smart plug'}
+              >
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+                  <Rect x="4" y="4" width="16" height="16" rx="3" stroke={theme.ink} strokeWidth="2.5" />
+                </Svg>
+                <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? 'Turn All OFF' : 'I-OFF Lahat'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.masterBtn,
+                  { backgroundColor: '#FF5500', borderColor: '#FF5500' },
+                ]}
+                onPress={() => handleMasterTurnAll('ON')}
+                accessibilityRole="button"
+                accessibilityLabel={isEnglish ? 'Turn on all smart plugs' : 'Buksan ang lahat ng smart plug'}
+              >
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+                  <Path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="#ffffff" />
+                </Svg>
+                <Text style={[styles.masterBtnText, { color: '#ffffff', fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
+                  {isEnglish ? 'Turn All ON' : 'I-ON Lahat'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.masterBtn,
+                {
+                  backgroundColor: theme.cont,
+                  borderColor: theme.line,
+                  marginTop: 8,
+                  paddingVertical: 11,
+                },
+              ]}
+              onPress={() =>
+                askTipi(
+                  buildPlugsExplanationPrompt({
+                    activeCount,
+                    totalCount: smartPlugs.length,
+                    totalActiveWatts,
+                    totalKwh,
+                    totalCost,
+                    plugSummaries: smartPlugs.map(
+                      (p) =>
+                        `${p.name} (${p.relayState}, ${p.powerWatts.toFixed(0)}W, ₱${p.monthlyCost.toFixed(0)}/mo)`
+                    ),
+                    language,
+                  })
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel={isEnglish ? 'Explain Smart Plugs Consumption with Tipi' : 'Ipaliwanag kay Tipi ang Konsumo ng mga Smart Plug'}
+            >
+              <Text style={[styles.masterBtnText, { color: theme.ink, fontSize: 13 * fontScale }]}>
+                {isEnglish ? 'Explain Smart Plugs with Tipi' : 'Ipaliwanag kay Tipi ang Smart Plugs'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Filter Pills */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {[
+              { key: 'all', label: `${isEnglish ? 'All' : 'Lahat'} (${smartPlugs.length})` },
+              { key: 'on', label: `${isEnglish ? 'ON' : 'Naka-ON'} (${activeCount})` },
+              { key: 'off', label: `${isEnglish ? 'OFF' : 'Naka-OFF'} (${smartPlugs.length - activeCount})` },
+              { key: 'timer', label: `${isEnglish ? 'Timer' : 'May Timer'} (${smartPlugs.filter((p) => p.timer?.active).length})` },
+              { key: 'schedule', label: `${isEnglish ? 'Scheduled' : 'Naka-Schedule'} (${smartPlugs.filter((p) => p.schedule?.enabled).length})` },
+            ].map((f) => (
+              <TouchableOpacity
+                key={f.key}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: activeFilter === f.key ? '#FF5500' : theme.surface,
+                    borderColor: activeFilter === f.key ? '#FF5500' : '#FF6B002B',
+                  },
+                ]}
+                onPress={() => setActiveFilter(f.key as any)}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    {
+                      color: activeFilter === f.key ? '#ffffff' : theme.ink,
+                      fontSize: 12 * fontScale,
+                      fontFamily: 'Coolvetica',
+                    },
+                  ]}
+                >
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Plug Cards List */}
+          <View style={styles.plugsList}>
+            {filteredPlugs.length === 0 ? (
+              <View style={[styles.emptyContainer, { backgroundColor: theme.surface, borderColor: theme.line }]}>
+                <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
+                  <Circle cx="12" cy="12" r="9" stroke={theme.muted} strokeWidth="2" />
+                  <Path d="M8 12H16" stroke={theme.muted} strokeWidth="2" strokeLinecap="round" />
+                </Svg>
+                <Text style={[styles.emptyTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
+                  Walang Smart Plug sa Filter
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
+                  Walang saksakan na tumutugma sa kasalukuyang piniling kategorya.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.resetFilterBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
+                  onPress={() => setActiveFilter('all')}
+                >
+                  <Text style={[styles.resetFilterBtnText, { color: theme.brand, fontSize: 13 * fontScale }]}>
+                    Ipakita ang Lahat
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              filteredPlugs.map((plug) => {
+                const isPlugOn = plug.relayState === 'ON';
+                const isTimerActive = !!plug.timer?.active;
+                const isScheduleEnabled = !!plug.schedule?.enabled;
+                const isScheduleRunningNow = isScheduleActiveNow(plug.schedule);
+                const isExpanded = !!expandedPlugs[plug.id];
+
+                return (
+                  <View
+                    key={plug.id}
+                    style={[
+                      styles.plugCard,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: isPlugOn ? theme.brand : theme.line,
+                        shadowColor: theme.ink,
+                      },
+                    ]}
                   >
-                    <View style={styles.cardInfoLeft}>
-                      <View
-                        style={[
-                          styles.iconBadge,
-                          {
-                            backgroundColor: `${plug.color}15`,
-                            borderColor: `${plug.color}40`,
-                          },
-                        ]}
-                      >
-                        <ApplianceIcon iconId={plug.iconId} color={plug.color} size={24} />
-                      </View>
-
-                      <View style={styles.nameLocationWrap}>
-                        <Text style={[styles.plugTitle, { color: theme.ink, fontSize: 15 * fontScale }]} numberOfLines={1}>
-                          {plug.name}
-                        </Text>
-                        <Text style={[styles.plugSubtitle, { color: theme.muted, fontSize: 11 * fontScale }]} numberOfLines={1}>
-                          {plug.location} · <Text style={{ color: isPlugOn ? theme.ok : theme.muted, fontWeight: '700' }}>{isPlugOn ? 'ON' : 'OFF'}</Text>
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.cardHeaderRight}>
-                      {/* Live Watts */}
-                      <View style={[styles.liveWattsPill, { backgroundColor: theme.cont }]}>
-                        <Text style={[styles.liveWattsPillText, { color: isPlugOn ? theme.brand : theme.muted, fontSize: 12 * fontScale }]}>
-                          {plug.powerWatts.toFixed(0)} W
-                        </Text>
-                      </View>
-
-                      {/* Dedicated Tactile ON/OFF Button */}
-                      <TouchableOpacity
-                        style={[
-                          styles.dedicatedToggleBtn,
-                          {
-                            backgroundColor: isPlugOn ? theme.ok : theme.cont,
-                            borderColor: isPlugOn ? theme.ok : theme.line,
-                          },
-                        ]}
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          handleToggle(plug.id);
-                        }}
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: isPlugOn }}
-                        accessibilityLabel={`Smart plug ${plug.name}, ${isPlugOn ? 'Naka-on' : 'Naka-off'}. Pindutin para i-toggle.`}
-                        activeOpacity={0.8}
-                      >
+                    {/* Minimized Plug Card Row: Essential info + arrow */}
+                    <TouchableOpacity
+                      style={[styles.cardHeader, { marginBottom: isExpanded ? 12 : 0 }]}
+                      onPress={() => togglePlugExpand(plug.id)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${plug.name}, ${isPlugOn ? 'Naka-ON' : 'Naka-OFF'}, ${plug.powerWatts.toFixed(0)} Watts. ${isExpanded ? 'I-minimize' : 'I-expand'}`}
+                    >
+                      <View style={styles.cardInfoLeft}>
                         <View
                           style={[
-                            styles.toggleIndicatorDot,
+                            styles.iconBadge,
                             {
-                              backgroundColor: isPlugOn ? '#FFFFFF' : theme.muted,
-                            },
-                          ]}
-                        />
-                        <Text
-                          style={[
-                            styles.toggleBtnText,
-                            {
-                              color: isPlugOn ? '#FFFFFF' : theme.ink,
-                              fontSize: 12 * fontScale,
+                              backgroundColor: `${plug.color}15`,
+                              borderColor: `${plug.color}40`,
                             },
                           ]}
                         >
-                          {isPlugOn ? 'ON' : 'OFF'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      {/* Small Arrow / Chevron */}
-                      <View style={styles.chevronWrapper}>
-                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                          <Path
-                            d={isExpanded ? 'M18 15L12 9L6 15' : 'M6 9L12 15L18 9'}
-                            stroke={theme.ink}
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </Svg>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Expanded Telemetry, Timers, Schedule, and Tips */}
-                  {isExpanded && (
-                    <View style={styles.expandedSection}>
-
-                  {/* Telemetry Metrics Grid (All Necessary Data) */}
-                  <View style={[styles.telemetryGrid, { backgroundColor: theme.cont, borderColor: theme.line }]}>
-                    {/* Metric 1: Live Watts */}
-                    <View style={styles.telemetryCell}>
-                      <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                        Live Power
-                      </Text>
-                      <Text
-                        style={[
-                          styles.telemetryValue,
-                          {
-                            color: isPlugOn ? theme.brand : theme.muted,
-                            fontSize: 16 * fontScale,
-                          },
-                        ]}
-                      >
-                        {plug.powerWatts.toFixed(1)} W
-                      </Text>
-                    </View>
-
-                    {/* Metric 2: RMS Voltage */}
-                    <View style={styles.telemetryCell}>
-                      <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                        RMS Voltage
-                      </Text>
-                      <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
-                        {plug.voltageRms.toFixed(1)} V
-                      </Text>
-                    </View>
-
-                    {/* Metric 3: Current in Amps */}
-                    <View style={styles.telemetryCell}>
-                      <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                        Current
-                      </Text>
-                      <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
-                        {plug.currentAmps.toFixed(2)} A
-                      </Text>
-                    </View>
-
-                    {/* Metric 4: Power Factor */}
-                    <View style={styles.telemetryCell}>
-                      <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                        Power Factor
-                      </Text>
-                      <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
-                        {plug.powerFactor.toFixed(2)} PF
-                      </Text>
-                    </View>
-
-                    {/* Metric 5: Accumulated kWh */}
-                    <View style={styles.telemetryCell}>
-                      <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                        Konsumo
-                      </Text>
-                      <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
-                        {plug.accumulatedKwh.toFixed(1)} kWh
-                      </Text>
-                    </View>
-
-                    {/* Metric 6: Estimated Meralco Cost */}
-                    <View style={styles.telemetryCell}>
-                      <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                        Tinatayang Gastos
-                      </Text>
-                      <Text style={[styles.telemetryValue, { color: theme.ok, fontSize: 15 * fontScale }]}>
-                        ₱{plug.monthlyCost.toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Auto-Off Timer Configuration Bar */}
-                  <View style={styles.timerSection}>
-                    <View style={styles.sectionHeaderRow}>
-                      <View style={styles.sectionTitleRow}>
-                        <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" style={{ marginRight: 5 }}>
-                          <Circle cx="12" cy="13" r="8" stroke={theme.ink} strokeWidth="2.2" />
-                          <Path d="M12 9V13L15 15" stroke={theme.ink} strokeWidth="2" strokeLinecap="round" />
-                          <Path d="M10 2H14" stroke={theme.ink} strokeWidth="2.2" strokeLinecap="round" />
-                        </Svg>
-                        <Text style={[styles.sectionSectionTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                          Auto-Off Timer
-                        </Text>
-                      </View>
-
-                      {isTimerActive && (
-                        <View style={[styles.activeTimerBadge, { backgroundColor: theme.warnBg, borderColor: theme.warn }]}>
-                          <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" style={{ marginRight: 4 }}>
-                            <Circle cx="12" cy="12" r="9" stroke={theme.warn} strokeWidth="2.2" />
-                            <Path d="M12 7V12L15 14" stroke={theme.warn} strokeWidth="2" strokeLinecap="round" />
-                          </Svg>
-                          <Text style={[styles.activeTimerText, { color: theme.warn, fontSize: 12 * fontScale }]}>
-                            Patay sa: {formatTimerRemaining(plug.timer?.remainingSeconds || 0)}
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => cancelPlugTimer(plug.id)}
-                            accessibilityLabel="Kanselahin ang timer"
-                            style={styles.cancelTimerBtn}
-                          >
-                            <Text style={[styles.cancelTimerText, { color: theme.danger, fontSize: 11 * fontScale }]}>
-                              Kanselahin
-                            </Text>
-                          </TouchableOpacity>
+                          <ApplianceIcon iconId={plug.iconId} color={plug.color} size={24} />
                         </View>
-                      )}
-                    </View>
 
-                    {/* Quick Preset Buttons */}
-                    <View style={styles.timerPresetsRow}>
-                      {[
-                        { mins: 15, label: '+15m' },
-                        { mins: 30, label: '+30m' },
-                        { mins: 60, label: '+1h' },
-                        { mins: 120, label: '+2h' },
-                      ].map((t) => (
-                        <TouchableOpacity
-                          key={t.mins}
-                          style={[
-                            styles.presetBtn,
-                            {
-                              backgroundColor: theme.surface,
-                              borderColor: theme.line,
-                            },
-                          ]}
-                          onPress={() => handleSetQuickTimer(plug.id, t.mins)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Mag-set ng ${t.label} auto-off timer`}
-                        >
-                          <Text style={[styles.presetBtnText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                            {t.label}
+                        <View style={styles.nameLocationWrap}>
+                          <Text style={[styles.plugTitle, { color: theme.ink, fontSize: 15 * fontScale }]} numberOfLines={1}>
+                            {plug.name}
                           </Text>
-                        </TouchableOpacity>
-                      ))}
-
-                      <TouchableOpacity
-                        style={[
-                          styles.presetBtnCustom,
-                          {
-                            backgroundColor: theme.surface,
-                            borderColor: theme.brand,
-                          },
-                        ]}
-                        onPress={() => handleOpenCustomTimer(plug.id)}
-                        accessibilityRole="button"
-                        accessibilityLabel="Iba pang oras ng timer"
-                      >
-                        <Text style={[styles.presetBtnCustomText, { color: theme.brand, fontSize: 12 * fontScale }]}>
-                          Iba pa...
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Schedule Configuration Bar */}
-                  <View style={[styles.scheduleSection, { borderTopColor: theme.line }]}>
-                    <View style={styles.scheduleRow}>
-                      <View style={styles.scheduleLeft}>
-                        <View style={styles.scheduleTitleWrap}>
-                          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 5 }}>
-                            <Rect x="3" y="4" width="18" height="18" rx="3" stroke={theme.ink} strokeWidth="2" />
-                            <Path d="M16 2V6M8 2V6M3 10H21" stroke={theme.ink} strokeWidth="2" strokeLinecap="round" />
-                          </Svg>
-                          <Text style={[styles.sectionSectionTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                            Iskedyul:
-                          </Text>
-                          <Text
-                            style={[
-                              styles.scheduleStatusText,
-                              {
-                                color: isScheduleEnabled ? theme.ok : theme.muted,
-                                fontSize: 13 * fontScale,
-                              },
-                            ]}
-                          >
-                            {isScheduleEnabled
-                              ? isScheduleRunningNow
-                                ? `Kasalukuyang Umaandar (${plug.schedule?.startTime} – ${plug.schedule?.endTime})`
-                                : `${plug.schedule?.startTime} – ${plug.schedule?.endTime} (${plug.schedule?.label || 'Nakahanda'})`
-                              : 'Naka-off'}
+                          <Text style={[styles.plugSubtitle, { color: theme.muted, fontSize: 11 * fontScale }]} numberOfLines={1}>
+                            {plug.location} · <Text style={{ color: isPlugOn ? theme.ok : theme.muted, fontWeight: '700' }}>{isPlugOn ? 'ON' : 'OFF'}</Text>
                           </Text>
                         </View>
-                        {isScheduleEnabled && plug.schedule?.days && (
-                          <Text style={[styles.scheduleDaysSub, { color: theme.muted, fontSize: 11 * fontScale }]}>
-                            {plug.schedule.days.length === 7 ? 'Araw-araw' : plug.schedule.days.join(', ')}
-                          </Text>
-                        )}
                       </View>
 
-                      <View style={styles.scheduleRightBtns}>
+                      <View style={styles.cardHeaderRight}>
+                        {/* Live Watts */}
+                        <View style={[styles.liveWattsPill, { backgroundColor: theme.cont }]}>
+                          <Text style={[styles.liveWattsPillText, { color: isPlugOn ? theme.brand : theme.muted, fontSize: 12 * fontScale }]}>
+                            {plug.powerWatts.toFixed(0)} W
+                          </Text>
+                        </View>
+
+                        {/* Dedicated Tactile ON/OFF Button */}
                         <TouchableOpacity
                           style={[
-                            styles.scheduleToggleBtn,
+                            styles.dedicatedToggleBtn,
                             {
-                              backgroundColor: isScheduleEnabled ? theme.okBg : theme.cont,
-                              borderColor: isScheduleEnabled ? theme.ok : theme.line,
+                              backgroundColor: isPlugOn ? theme.ok : theme.cont,
+                              borderColor: isPlugOn ? theme.ok : theme.line,
                             },
                           ]}
-                          onPress={() => {
-                            triggerHaptic();
-                            if (plug.schedule) {
-                              setPlugSchedule(plug.id, {
-                                ...plug.schedule,
-                                enabled: !plug.schedule.enabled,
-                              });
-                            } else {
-                              handleOpenSchedule(plug);
-                            }
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            handleToggle(plug.id);
                           }}
                           accessibilityRole="switch"
-                          accessibilityState={{ checked: isScheduleEnabled }}
-                          accessibilityLabel="I-toggle ang iskedyul"
+                          accessibilityState={{ checked: isPlugOn }}
+                          accessibilityLabel={`Smart plug ${plug.name}, ${isPlugOn ? 'Naka-on' : 'Naka-off'}. Pindutin para i-toggle.`}
+                          activeOpacity={0.8}
                         >
+                          <View
+                            style={[
+                              styles.toggleIndicatorDot,
+                              {
+                                backgroundColor: isPlugOn ? '#FFFFFF' : theme.muted,
+                              },
+                            ]}
+                          />
                           <Text
                             style={[
-                              styles.scheduleToggleText,
+                              styles.toggleBtnText,
                               {
-                                color: isScheduleEnabled ? theme.ok : theme.muted,
+                                color: isPlugOn ? '#FFFFFF' : theme.ink,
                                 fontSize: 12 * fontScale,
                               },
                             ]}
                           >
-                            {isScheduleEnabled ? 'Naka-set' : 'I-enable'}
+                            {isPlugOn ? 'ON' : 'OFF'}
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={[styles.editScheduleBtn, { backgroundColor: theme.surface, borderColor: theme.line }]}
-                          onPress={() => handleOpenSchedule(plug)}
-                          accessibilityRole="button"
-                          accessibilityLabel="I-edit ang iskedyul"
-                        >
-                          <Text style={[styles.editScheduleText, { color: theme.brand, fontSize: 12 * fontScale }]}>
-                            I-edit
-                          </Text>
-                        </TouchableOpacity>
+                        {/* Small Arrow / Chevron */}
+                        <View style={styles.chevronWrapper}>
+                          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                            <Path
+                              d={isExpanded ? 'M18 15L12 9L6 15' : 'M6 9L12 15L18 9'}
+                              stroke={theme.ink}
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </Svg>
+                        </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
+
+                    {/* Expanded Telemetry, Timers, Schedule, and Tips */}
+                    {isExpanded && (
+                      <View style={styles.expandedSection}>
+
+                        {/* Telemetry Metrics Grid (All Necessary Data) */}
+                        <View style={[styles.telemetryGrid, { backgroundColor: theme.cont, borderColor: theme.line }]}>
+                          {/* Metric 1: Live Watts */}
+                          <View style={styles.telemetryCell}>
+                            <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                              Live Power
+                            </Text>
+                            <Text
+                              style={[
+                                styles.telemetryValue,
+                                {
+                                  color: isPlugOn ? theme.brand : theme.muted,
+                                  fontSize: 16 * fontScale,
+                                },
+                              ]}
+                            >
+                              {plug.powerWatts.toFixed(1)} W
+                            </Text>
+                          </View>
+
+                          {/* Metric 2: RMS Voltage */}
+                          <View style={styles.telemetryCell}>
+                            <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                              RMS Voltage
+                            </Text>
+                            <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
+                              {plug.voltageRms.toFixed(1)} V
+                            </Text>
+                          </View>
+
+                          {/* Metric 3: Current in Amps */}
+                          <View style={styles.telemetryCell}>
+                            <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                              Current
+                            </Text>
+                            <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
+                              {plug.currentAmps.toFixed(2)} A
+                            </Text>
+                          </View>
+
+                          {/* Metric 4: Power Factor */}
+                          <View style={styles.telemetryCell}>
+                            <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                              Power Factor
+                            </Text>
+                            <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
+                              {plug.powerFactor.toFixed(2)} PF
+                            </Text>
+                          </View>
+
+                          {/* Metric 5: Accumulated kWh */}
+                          <View style={styles.telemetryCell}>
+                            <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                              Konsumo
+                            </Text>
+                            <Text style={[styles.telemetryValue, { color: theme.ink, fontSize: 15 * fontScale }]}>
+                              {plug.accumulatedKwh.toFixed(1)} kWh
+                            </Text>
+                          </View>
+
+                          {/* Metric 6: Estimated Meralco Cost */}
+                          <View style={styles.telemetryCell}>
+                            <Text style={[styles.telemetryLabel, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                              Tinatayang Gastos
+                            </Text>
+                            <Text style={[styles.telemetryValue, { color: theme.ok, fontSize: 15 * fontScale }]}>
+                              ₱{plug.monthlyCost.toFixed(2)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Auto-Off Timer Configuration Bar */}
+                        <View style={styles.timerSection}>
+                          <View style={styles.sectionHeaderRow}>
+                            <View style={styles.sectionTitleRow}>
+                              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" style={{ marginRight: 5 }}>
+                                <Circle cx="12" cy="13" r="8" stroke={theme.ink} strokeWidth="2.2" />
+                                <Path d="M12 9V13L15 15" stroke={theme.ink} strokeWidth="2" strokeLinecap="round" />
+                                <Path d="M10 2H14" stroke={theme.ink} strokeWidth="2.2" strokeLinecap="round" />
+                              </Svg>
+                              <Text style={[styles.sectionSectionTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
+                                Auto-Off Timer
+                              </Text>
+                            </View>
+
+                            {isTimerActive && (
+                              <View style={[styles.activeTimerBadge, { backgroundColor: theme.warnBg, borderColor: theme.warn }]}>
+                                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" style={{ marginRight: 4 }}>
+                                  <Circle cx="12" cy="12" r="9" stroke={theme.warn} strokeWidth="2.2" />
+                                  <Path d="M12 7V12L15 14" stroke={theme.warn} strokeWidth="2" strokeLinecap="round" />
+                                </Svg>
+                                <Text style={[styles.activeTimerText, { color: theme.warn, fontSize: 12 * fontScale }]}>
+                                  Patay sa: {formatTimerRemaining(plug.timer?.remainingSeconds || 0)}
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => cancelPlugTimer(plug.id)}
+                                  accessibilityLabel="Kanselahin ang timer"
+                                  style={styles.cancelTimerBtn}
+                                >
+                                  <Text style={[styles.cancelTimerText, { color: theme.danger, fontSize: 11 * fontScale }]}>
+                                    Kanselahin
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+
+                          {/* Quick Preset Buttons */}
+                          <View style={styles.timerPresetsRow}>
+                            {[
+                              { mins: 15, label: '+15m' },
+                              { mins: 30, label: '+30m' },
+                              { mins: 60, label: '+1h' },
+                              { mins: 120, label: '+2h' },
+                            ].map((t) => (
+                              <TouchableOpacity
+                                key={t.mins}
+                                style={[
+                                  styles.presetBtn,
+                                  {
+                                    backgroundColor: theme.surface,
+                                    borderColor: theme.line,
+                                  },
+                                ]}
+                                onPress={() => handleSetQuickTimer(plug.id, t.mins)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Mag-set ng ${t.label} auto-off timer`}
+                              >
+                                <Text style={[styles.presetBtnText, { color: theme.ink, fontSize: 12 * fontScale }]}>
+                                  {t.label}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+
+                            <TouchableOpacity
+                              style={[
+                                styles.presetBtnCustom,
+                                {
+                                  backgroundColor: theme.surface,
+                                  borderColor: theme.brand,
+                                },
+                              ]}
+                              onPress={() => handleOpenCustomTimer(plug.id)}
+                              accessibilityRole="button"
+                              accessibilityLabel="Iba pang oras ng timer"
+                            >
+                              <Text style={[styles.presetBtnCustomText, { color: theme.brand, fontSize: 12 * fontScale }]}>
+                                Iba pa...
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        {/* Schedule Configuration Bar */}
+                        <View style={[styles.scheduleSection, { borderTopColor: theme.line }]}>
+                          <View style={styles.scheduleRow}>
+                            <View style={styles.scheduleLeft}>
+                              <View style={styles.scheduleTitleWrap}>
+                                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 5 }}>
+                                  <Rect x="3" y="4" width="18" height="18" rx="3" stroke={theme.ink} strokeWidth="2" />
+                                  <Path d="M16 2V6M8 2V6M3 10H21" stroke={theme.ink} strokeWidth="2" strokeLinecap="round" />
+                                </Svg>
+                                <Text style={[styles.sectionSectionTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
+                                  Iskedyul:
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.scheduleStatusText,
+                                    {
+                                      color: isScheduleEnabled ? theme.ok : theme.muted,
+                                      fontSize: 13 * fontScale,
+                                    },
+                                  ]}
+                                >
+                                  {isScheduleEnabled
+                                    ? isScheduleRunningNow
+                                      ? `Kasalukuyang Umaandar (${plug.schedule?.startTime} – ${plug.schedule?.endTime})`
+                                      : `${plug.schedule?.startTime} – ${plug.schedule?.endTime} (${plug.schedule?.label || 'Nakahanda'})`
+                                    : 'Naka-off'}
+                                </Text>
+                              </View>
+                              {isScheduleEnabled && plug.schedule?.days && (
+                                <Text style={[styles.scheduleDaysSub, { color: theme.muted, fontSize: 11 * fontScale }]}>
+                                  {plug.schedule.days.length === 7 ? 'Araw-araw' : plug.schedule.days.join(', ')}
+                                </Text>
+                              )}
+                            </View>
+
+                            <View style={styles.scheduleRightBtns}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.scheduleToggleBtn,
+                                  {
+                                    backgroundColor: isScheduleEnabled ? theme.okBg : theme.cont,
+                                    borderColor: isScheduleEnabled ? theme.ok : theme.line,
+                                  },
+                                ]}
+                                onPress={() => {
+                                  triggerHaptic();
+                                  if (plug.schedule) {
+                                    setPlugSchedule(plug.id, {
+                                      ...plug.schedule,
+                                      enabled: !plug.schedule.enabled,
+                                    });
+                                  } else {
+                                    handleOpenSchedule(plug);
+                                  }
+                                }}
+                                accessibilityRole="switch"
+                                accessibilityState={{ checked: isScheduleEnabled }}
+                                accessibilityLabel="I-toggle ang iskedyul"
+                              >
+                                <Text
+                                  style={[
+                                    styles.scheduleToggleText,
+                                    {
+                                      color: isScheduleEnabled ? theme.ok : theme.muted,
+                                      fontSize: 12 * fontScale,
+                                    },
+                                  ]}
+                                >
+                                  {isScheduleEnabled ? 'Naka-set' : 'I-enable'}
+                                </Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={[styles.editScheduleBtn, { backgroundColor: theme.surface, borderColor: theme.line }]}
+                                onPress={() => handleOpenSchedule(plug)}
+                                accessibilityRole="button"
+                                accessibilityLabel="I-edit ang iskedyul"
+                              >
+                                <Text style={[styles.editScheduleText, { color: theme.brand, fontSize: 12 * fontScale }]}>
+                                  I-edit
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Energy-Saving Tip from Tipi */}
+                        {plug.tip ? (
+                          <View style={[styles.tipCard, { backgroundColor: theme.warnBg, borderColor: theme.warn }]}>
+                            <View style={styles.tipInnerRow}>
+                              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6, marginTop: 1 }}>
+                                <Path
+                                  d="M9 18H15M10 22H14M12 2C8.13401 2 5 5.13401 5 9C5 11.3867 6.19694 13.4984 8 14.7428V16C8 16.5523 8.44772 17 9 17H15C15.5523 17 16 16.5523 16 16V14.7428C17.8031 13.4984 19 11.3867 19 9C19 5.13401 15.866 2 12 2Z"
+                                  stroke={theme.ink}
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </Svg>
+                              <Text style={[styles.tipText, { color: theme.ink, fontSize: 12 * fontScale, flex: 1 }]}>
+                                <Text style={{ fontWeight: '700' }}>Tip ni Tipi:</Text> {plug.tip}
+                              </Text>
+                            </View>
+                          </View>
+                        ) : null}
+                      </View>
+                    )}
                   </View>
+                );
+              })
+            )}
+          </View>
 
-                  {/* Energy-Saving Tip from Tipi */}
-                  {plug.tip ? (
-                    <View style={[styles.tipCard, { backgroundColor: theme.warnBg, borderColor: theme.warn }]}>
-                      <View style={styles.tipInnerRow}>
-                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6, marginTop: 1 }}>
-                          <Path
-                            d="M9 18H15M10 22H14M12 2C8.13401 2 5 5.13401 5 9C5 11.3867 6.19694 13.4984 8 14.7428V16C8 16.5523 8.44772 17 9 17H15C15.5523 17 16 16.5523 16 16V14.7428C17.8031 13.4984 19 11.3867 19 9C19 5.13401 15.866 2 12 2Z"
-                            stroke={theme.ink}
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </Svg>
-                        <Text style={[styles.tipText, { color: theme.ink, fontSize: 12 * fontScale, flex: 1 }]}>
-                          <Text style={{ fontWeight: '700' }}>Tip ni Tipi:</Text> {plug.tip}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
-                    </View>
-                  )}
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        <View style={{ height: 110 }} />
-      </ScrollView>
-    </PageTransitionView>
+          <View style={{ height: 110 }} />
+        </ScrollView>
+      </PageTransitionView>
 
       {/* Custom Timer Dialog Modal */}
       <Modal

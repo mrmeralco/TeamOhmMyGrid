@@ -19,7 +19,8 @@ describe('Multi-CAN Profiles & Energy Settings', () => {
     expect(can1.customerName).toBe('Maria Santos');
     expect(can1.ratePerKwh).toBe(11.43);
     expect(can1.budget).toBe(3500);
-    expect(can1.billData.customerAccountNumber).toBe('0192-8823-4410');
+    expect(can1.meterType).toBe('AMI');
+    expect(can1.billData?.customerAccountNumber).toBe('0192-8823-4410');
 
     // CAN 2: Tindahan / Negosyo
     expect(can2.id).toBe('can-2');
@@ -28,7 +29,8 @@ describe('Multi-CAN Profiles & Energy Settings', () => {
     expect(can2.customerName).toBe('Santos Sari-Sari Store');
     expect(can2.ratePerKwh).toBe(11.48);
     expect(can2.budget).toBe(5000);
-    expect(can2.billData.customerAccountNumber).toBe('0284-9102-3321');
+    expect(can2.meterType).toBe('Analog');
+    expect(can2.billData?.customerAccountNumber).toBe('0284-9102-3321');
 
     // CAN 3: Condo / Taguig
     expect(can3.id).toBe('can-3');
@@ -37,7 +39,8 @@ describe('Multi-CAN Profiles & Energy Settings', () => {
     expect(can3.customerName).toBe('Maria Santos (Condo)');
     expect(can3.ratePerKwh).toBe(11.43);
     expect(can3.budget).toBe(2500);
-    expect(can3.billData.customerAccountNumber).toBe('0341-7789-5562');
+    expect(can3.meterType).toBe('Analog');
+    expect(can3.billData?.customerAccountNumber).toBe('0341-7789-5562');
   });
 
   it('calculates specific tier cliff statuses correctly for each preset profile', () => {
@@ -196,6 +199,7 @@ describe('Multi-CAN Profiles & Energy Settings', () => {
         ratePerKwh: 11.43,
         budget: 2500,
         currentKwh: 120,
+        meterType: 'Analog',
         billData: {
           customerAccountNumber: formatCANDisplay(secondaryCan),
           billingPeriod: { startDate: '2026-04-15', endDate: '2026-05-14' },

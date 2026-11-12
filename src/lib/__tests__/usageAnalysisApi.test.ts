@@ -31,11 +31,14 @@ describe('Usage analysis API', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
   test('invalid AI output fails without caching it and allows retry', async () => {
-    mockCreate.mockResolvedValueOnce({ output_text: 'not json' }).mockResolvedValueOnce({ output_text: JSON.stringify(baseline) });
+    mockCreate
+      .mockResolvedValueOnce({ output_text: 'not json' })
+      .mockResolvedValueOnce({ output_text: 'not json' })
+      .mockResolvedValueOnce({ output_text: JSON.stringify(baseline) });
     const { POST } = require('../../app/api/analyze-usage+api');
     expect((await POST(request('{"scenario":"baseline"}'))).status).toBe(502);
     expect((await POST(request('{"scenario":"baseline"}'))).status).toBe(200);
-    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(mockCreate).toHaveBeenCalledTimes(3);
   });
 });
 

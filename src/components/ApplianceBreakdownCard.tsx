@@ -301,7 +301,7 @@ export const ApplianceBreakdownCard: React.FC<ApplianceBreakdownCardProps> = ({
                       </View>
                     </View>
                     <Text style={[styles.drawerText, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                      💡 {plug.tip}
+                      {plug.tip}
                     </Text>
                   </View>
                 )}

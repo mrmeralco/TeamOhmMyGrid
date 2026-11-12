@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../context/ThemeContext';
 
@@ -14,25 +14,14 @@ export const BudgetGauge: React.FC<BudgetGaugeProps> = ({
   budget,
   percentage,
 }) => {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
 
   const calcPercent = percentage !== undefined ? percentage : budget > 0 ? (projected / budget) * 100 : 0;
   const clampedPercent = Math.min(100, Math.max(0, Math.round(calcPercent)));
 
   const radius = 42;
   const circumference = 2 * Math.PI * radius; // ~263.89
-
-  // Smooth entrance animation for arc progress
-  const progressAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: clampedPercent,
-      duration: 1100,
-      useNativeDriver: false,
-    }).start();
-  }, [clampedPercent]);
-
   const strokeDashoffset = circumference - (circumference * clampedPercent) / 100;
 
   // Rich orange-accented status colors
@@ -94,14 +83,14 @@ export const BudgetGauge: React.FC<BudgetGaugeProps> = ({
         <View style={styles.detailsContainer}>
           <View style={styles.pillLabel}>
             <Text style={[styles.label, { color: '#FF6B00', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
-              PROJECTED NA BILL
+              {isEnglish ? 'PROJECTED BILL' : 'PROJECTED NA BILL'}
             </Text>
           </View>
           <Text style={[styles.projectedAmount, { color: theme.ink, fontSize: 30 * fontScale, fontFamily: 'Coolvetica' }]}>
             ₱{projected.toLocaleString()}
           </Text>
           <Text style={[styles.budgetLimit, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
-            sa Budget na ₱{budget.toLocaleString()}
+            {isEnglish ? `of ₱${budget.toLocaleString()} Budget` : `sa Budget na ₱${budget.toLocaleString()}`}
           </Text>
         </View>
       </View>

@@ -34,7 +34,7 @@ export async function registerDailyPeakAlerts(): Promise<void> {
     // 7:55 AM Peak alert (Monday - Saturday)
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '⚡ Meralco Peak Hours Alert',
+        title: 'Meralco Peak Hours Alert',
         body: 'Magsisimula na ang Peak Hours (8 AM – 9 PM). Ipagpaliban ang paggamit ng plantsa o washing machine para makatipid.',
       },
       trigger: {
@@ -48,7 +48,7 @@ export async function registerDailyPeakAlerts(): Promise<void> {
     // 9:00 PM Off-Peak alert
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '🌙 Off-Peak Hours Na!',
+        title: 'Off-Peak Hours Na!',
         body: 'Mababang demand period na hanggang 8:00 AM bukas. Pwede nang gamitin ang high-wattage appliances.',
       },
       trigger: {
@@ -71,7 +71,7 @@ export async function scheduleApplianceDelayReminder(
     await requestNotificationPermissions();
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: `⏰ Appliance Reminder: ${applianceName}`,
+        title: `Appliance Reminder: ${applianceName}`,
         body: `Tapos na ang ${delayMinutes} minutong palugit. Ligtas at mas matipid nang gamitin ang iyong ${applianceName}!`,
       },
       trigger: {

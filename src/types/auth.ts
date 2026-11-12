@@ -2,6 +2,8 @@
 // KuryenTipid - Authentication and User Types (Updated)
 // ==============================================================================
 
+import { MeterType } from './index';
+
 export type IdentifierType = 'email' | 'username' | 'can' | 'invalid';
 
 export interface CustomerRecord {
@@ -16,6 +18,9 @@ export interface CustomerRecord {
   majorAppliances: string[];
   isRegistered: boolean;
   registeredAt?: string;
+  meterType: MeterType;
+  meterSerialNumber?: string;
+  lastReadingDate?: string;
 }
 
 export interface UserProfile {
@@ -32,6 +37,9 @@ export interface UserProfile {
   monthlyBudget: number;
   isEmailVerified: boolean;
   createdAt: string;
+  meterType?: MeterType;
+  meterSerialNumber?: string;
+  lastReadingDate?: string;
 }
 
 export interface RegistrationFormData {

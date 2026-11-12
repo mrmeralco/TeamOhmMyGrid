@@ -11,7 +11,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
@@ -19,15 +18,16 @@ import { BillVerificationDrawer } from '../../components/BillVerificationDrawer'
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { PageTransitionView } from '../../components/PageTransitionView';
-import { parseMeralcoBillImage } from '../../lib/geminiService';
+import { parseMeralcoBillImage, buildBillExplanationPrompt } from '../../lib/geminiService';
 import { ExtractedBillData } from '../../types';
 import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_BILL_BREAKDOWN, MOCK_USER } from '../../constants/mockData';
 
 export default function BillScreen() {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
   const { user } = useAuth();
-  const { activeBill, setActiveBill, addChatMessage, activeCanProfile } = useEnergy();
+  const { activeBill, setActiveBill, askTipi, activeCanProfile } = useEnergy();
 
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -74,7 +74,6 @@ export default function BillScreen() {
           quality: 0.8,
         });
       } catch {
-        // Fallback for environments where camera is not available (e.g. desktop web)
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           base64: true,
@@ -88,8 +87,11 @@ export default function BillScreen() {
         setPendingBillData(extracted);
         setDrawerVisible(true);
       }
-    } catch {
-      Alert.alert('Paalala', 'Hindi nabuksan ang camera.');
+    } catch (err: any) {
+      Alert.alert(
+        'Hindi Nabasa ang Bill',
+        err?.message || 'Hindi mabasa ang detalye ng Meralco bill. Pakisubukan muli.'
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -97,8 +99,16 @@ export default function BillScreen() {
 
   const handleManualInput = () => {
     setPendingBillData({
-      ...bill,
       customerAccountNumber: loggedInCan,
+      billingPeriod: {
+        startDate: activeBill?.billingPeriod?.startDate || '',
+        endDate: activeBill?.billingPeriod?.endDate || '',
+      },
+      dueDate: activeBill?.dueDate || '',
+      totalKwh: activeBill?.totalKwh || 0,
+      totalAmountDue: activeBill?.totalAmountDue || 0,
+      generationCharge: activeBill?.generationCharge,
+      verifiedByUser: false,
     });
     setDrawerVisible(true);
   };
@@ -110,8 +120,19 @@ export default function BillScreen() {
   };
 
   const handleAskTipiAboutBill = () => {
-    addChatMessage('user', 'Himayin ang Bill Line-by-Line 📋');
-    router.push('/(tabs)/tanong');
+    const prompt = buildBillExplanationPrompt({
+      can: bill.customerAccountNumber,
+      profileName: activeCanProfile?.name || 'Bahay',
+      totalAmount,
+      totalKwh: bill.totalKwh,
+      dueDate: bill.dueDate,
+      genCharge,
+      distCharge,
+      transCharge,
+      taxCharge,
+      language,
+    });
+    askTipi(prompt);
   };
 
   return (
@@ -121,7 +142,7 @@ export default function BillScreen() {
           <View style={styles.header}>
             <View style={styles.headerTextGroup}>
               <Text style={[styles.title, { color: theme.ink, fontSize: 24 * fontScale, fontFamily: 'Coolvetica' }]}>
-                Suriin ang <Text style={{ color: '#FF6B00' }}>Bill</Text>
+                {isEnglish ? 'Review ' : 'Suriin ang '}<Text style={{ color: '#FF6B00' }}>Bill</Text>
               </Text>
               <View style={[styles.canBadge, { backgroundColor: '#FF6B0014', borderColor: '#FF6B0033' }]}>
                 <View style={styles.canIndicatorDot} />
@@ -136,54 +157,55 @@ export default function BillScreen() {
             </View>
           </View>
 
-          {/* Bill Summary Card */}
-          <View style={[styles.billCard, { backgroundColor: theme.surface, borderColor: '#FF6B0030' }]}>
+          {/* Bill Summary Card with Gradient Overlay */}
+          <View style={[styles.billCard, { backgroundColor: theme.surface, borderColor: '#FF6B0035' }]}>
             <LinearGradient
-              colors={['#FF6B000C', '#FFA04014']}
+              colors={['#FF6B000C', '#FFA04018']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
             />
             <View style={styles.pillLabel}>
               <Text style={[styles.labelBadge, { color: '#FF6B00', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
-                TOTAL NA BAYARIN
+                {isEnglish ? 'TOTAL AMOUNT DUE' : 'HALAGANG BABAYARAN'}
               </Text>
             </View>
 
-            <Text style={[styles.amountDue, { color: theme.ink, fontSize: 36 * fontScale, fontFamily: 'Coolvetica' }]}>
+            <Text style={[styles.amountDue, { color: theme.ink, fontSize: 32 * fontScale, fontFamily: 'Coolvetica' }]}>
               ₱{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Text>
 
             <View style={styles.metaRow}>
               <Text style={[styles.metaText, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
-                Konsumo: <Text style={{ color: '#FF6B00', fontWeight: '400' }}>{bill.totalKwh} kWh</Text>
+                {isEnglish ? 'Consumption: ' : 'Konsumo: '}<Text style={{ color: theme.ink, fontWeight: '700' }}>{bill.totalKwh} kWh</Text>
               </Text>
               <Text style={[styles.metaText, { color: theme.muted, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
-                Due Date: <Text style={{ color: theme.ink, fontWeight: '400' }}>{bill.dueDate}</Text>
+                Due Date: <Text style={{ color: theme.ink, fontWeight: '700' }}>{bill.dueDate}</Text>
               </Text>
             </View>
 
             {/* Month-over-Month Comparison */}
-            <View style={[styles.comparisonCard, { backgroundColor: theme.cont, borderColor: '#FF6B0020' }]}>
+            <View style={[styles.comparisonCard, { backgroundColor: theme.cont, borderColor: '#FF6B0024' }]}>
               <View style={styles.comparisonHeader}>
                 <Text style={[styles.comparisonTitle, { color: theme.ink, fontSize: 13 * fontScale, fontFamily: 'Coolvetica' }]}>
-                  Paghahambing sa Nakaraan
+                  {isEnglish ? 'Comparison vs Previous' : 'Paghahambing sa Nakaraan'}
                 </Text>
-                <View style={[styles.increaseBadge, { backgroundColor: '#FF4D261A', borderColor: '#FF4D2633' }]}>
-                  <Text style={[styles.increaseBadgeText, { color: '#FF451A', fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
+                <View style={[styles.increaseBadge, { backgroundColor: theme.dangerBg, borderColor: theme.danger }]}>
+                  <Text style={[styles.increaseBadgeText, { color: theme.danger, fontSize: 11 * fontScale, fontFamily: 'Coolvetica' }]}>
                     +{MOCK_BILL_BREAKDOWN.difference}
                   </Text>
                 </View>
               </View>
               <Text style={[styles.comparisonText, { color: theme.muted, fontSize: 12 * fontScale }]}>
-                Nakaraang buwan: ₱{MOCK_BILL_BREAKDOWN.lastMonthTotal.toLocaleString()} · Rate delta: {MOCK_BILL_BREAKDOWN.rateChange}
+                {isEnglish ? 'Last month' : 'Nakaraang buwan'}: ₱{MOCK_BILL_BREAKDOWN.lastMonthTotal.toLocaleString()} · Rate delta: {MOCK_BILL_BREAKDOWN.rateChange}
               </Text>
             </View>
 
-            {/* Segmented Cost Breakdown Bar */}
+            {/* Components Breakdown */}
             <Text style={[styles.breakdownHeader, { color: theme.ink, fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
-              Hati-hating Bayarin:
+              {isEnglish ? 'Components Breakdown' : 'Hati ng mga Gastusin'}
             </Text>
+
             <View style={styles.segmentedBar}>
               <View style={[styles.barSlice, { flex: 58, backgroundColor: '#FF4D26' }]} />
               <View style={[styles.barSlice, { flex: 19, backgroundColor: '#FF6B00' }]} />
@@ -214,7 +236,7 @@ export default function BillScreen() {
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#8B5CF6' }]} />
                 <Text style={[styles.legendText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
-                  VAT at Iba Pa (14%): ₱{taxCharge.toFixed(2)}
+                  {isEnglish ? 'VAT & Others' : 'VAT at Iba Pa'} (14%): ₱{taxCharge.toFixed(2)}
                 </Text>
               </View>
             </View>
@@ -240,7 +262,7 @@ export default function BillScreen() {
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text style={[styles.btnText, { color: '#ffffff', fontSize: 15 * fontScale, fontFamily: 'Coolvetica' }]}>
-                  📷 I-scan ang Bill (OCR)
+                  {isEnglish ? '📷 Scan Bill (OCR)' : '📷 I-scan ang Bill (OCR)'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -251,7 +273,7 @@ export default function BillScreen() {
               activeOpacity={0.8}
             >
               <Text style={[styles.secondaryBtnText, { color: theme.ink, fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
-                ✏️ Manu-manong Input
+                {isEnglish ? '✏️ Manual Input' : '✏️ Manu-manong Input'}
               </Text>
             </TouchableOpacity>
 
@@ -261,7 +283,7 @@ export default function BillScreen() {
               activeOpacity={0.8}
             >
               <Text style={[styles.tipiHelpText, { color: '#FF5500', fontSize: 14 * fontScale, fontFamily: 'Coolvetica' }]}>
-                💬 Ipaliwanag kay Tipi Line-by-Line
+                {isEnglish ? '💬 Explain Line-by-Line with Tipi' : '💬 Ipaliwanag kay Tipi Line-by-Line'}
               </Text>
             </TouchableOpacity>
           </View>

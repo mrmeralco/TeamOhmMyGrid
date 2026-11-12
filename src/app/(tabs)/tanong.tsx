@@ -35,7 +35,14 @@ import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { usePushToTalk } from '../../hooks/usePushToTalk';
 import { processTextQuery, processVoiceQuery } from '../../lib/geminiService';
-import { speakResponse } from '../../lib/audioService';
+import {
+  speakResponse,
+  unlockSpeechSynthesis,
+  togglePauseSpeaking,
+  stopSpeaking,
+  subscribeTtsState,
+  TtsPlaybackState,
+} from '../../lib/audioService';
 import { PageTransitionView } from '../../components/PageTransitionView';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -46,13 +53,6 @@ type MicPhase =
   | 'recording'    // enlarged, steady orange-red glow (no pulsing)
   | 'pouring'      // ring shrinks, orange-red shape flows from input box into chat
   | 'thinking';    // fluid wash dissolves into chat bubble while AI thinks
-
-const SUGGESTION_CHIPS = [
-  'Bakit lumobo ang Aircon ko?',
-  'Himayin ang Bill 📋',
-  'Paano makakatipid ng ₱500?',
-  'Peak Hours Alert?',
-];
 
 // Vibrant orange-red palette
 const ORANGE_RED_GLOW = '#FF3B1D';
@@ -394,7 +394,8 @@ function UserMessageBubble({
 //  MAIN SCREEN: Tanong kay Tipi
 // ─────────────────────────────────────────────────────────────
 export default function TanongScreen() {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
   const {
     currentKwh,
     budget,
@@ -403,11 +404,16 @@ export default function TanongScreen() {
     addChatMessage,
     registerVoiceTrigger,
     setVoiceRecordingState,
+    activeCanProfile,
+    pendingTipiPrompt,
+    clearPendingTipiPrompt,
   } = useEnergy();
 
   const [inputQuery, setInputQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
+  const [ttsState, setTtsState] = useState<TtsPlaybackState>('idle');
+  const [activeTtsText, setActiveTtsText] = useState<string | null>(null);
   const [micPhase, setMicPhase] = useState<MicPhase>('idle');
   const [pourActive, setPourActive] = useState(false);
   const [pourTargetDistance, setPourTargetDistance] = useState<number>(120);
@@ -429,40 +435,9 @@ export default function TanongScreen() {
   const scrollViewRef = useRef<any>(null);
   const scrollViewHeightRef = useRef<number>(520);
   const contentHeightRef = useRef<number>(110);
-  const liveTranscriptTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { isRecording, secondsLeft, startRecording, stopRecording } = usePushToTalk();
-
-  // Word-by-word streaming transcript simulation directly into the input/typing box
-  const SAMPLE_TRANSCRIPT_WORDS = [
-    'Bakit',
-    'lumobo',
-    'ang',
-    'singil',
-    'sa',
-    'kuryente',
-    'ko',
-    'ngayong',
-    'linggo?',
-  ];
-
-  const startStreamingTranscript = () => {
-    setInputQuery('');
-    let idx = 0;
-    liveTranscriptTimer.current = setInterval(() => {
-      if (idx < SAMPLE_TRANSCRIPT_WORDS.length) {
-        setInputQuery((prev) => (prev ? prev + ' ' : '') + SAMPLE_TRANSCRIPT_WORDS[idx]);
-        idx++;
-      }
-    }, 220);
-  };
-
-  const stopStreamingTranscript = () => {
-    if (liveTranscriptTimer.current) {
-      clearInterval(liveTranscriptTimer.current);
-      liveTranscriptTimer.current = null;
-    }
-  };
+  const { isRecording, secondsLeft, getLatestTranscript, startRecording, stopRecording } =
+    usePushToTalk();
 
   // ── Calculate dynamic distance from mic button to where the chat message lands ──
   const calculateTargetDistance = useCallback(() => {
@@ -471,28 +446,18 @@ export default function TanongScreen() {
     const userChatsCount = chatHistory.filter((m) => m.sender === 'user').length;
     const isInitialEmpty = userChatsCount === 0;
 
-    // Offset from capsule bottom (bottom: 92) to ScrollView bottom (chipsRow top):
-    // bottom spacer (80) + inputBar (69) + chipsRow (44) = 193.
-    // 193 - 92 = 101px.
-    const capsuleToScrollBottom = 101;
+    // Offset from capsule bottom (bottom: 92) to ScrollView bottom:
+    const capsuleToScrollBottom = 60;
 
     if (isInitialEmpty) {
-      // When there are no previous chats and it is empty:
-      // The new message lands near the top of the ScrollView right below Tipi's greeting.
-      // If chatHistory is completely empty: ~64px from top.
-      // If Tipi's initial greeting is present: exact bottom of user bubble is at ~184-188px.
       const messageBottomFromTop =
         chatHistory.length === 0 ? 64 : Math.max(184, contentH + 54);
       const distance = capsuleToScrollBottom + (viewportH - messageBottomFromTop);
       return Math.max(70, distance);
     } else {
-      // When there are previous chats:
-      // It shouldn't go as high! The message sits at the bottom of the ScrollView.
       if (contentH + 80 >= viewportH) {
-        // Content fills viewport or scrolls: bottom bubble sits 16px above ScrollView bottom
-        return capsuleToScrollBottom + 16; // ~117px
+        return capsuleToScrollBottom + 16;
       } else {
-        // Partially filled chat history: lands directly below existing messages
         const messageBottomFromTop = contentH + 50;
         const distance = capsuleToScrollBottom + (viewportH - messageBottomFromTop);
         return Math.max(capsuleToScrollBottom + 16, Math.min(280, distance));
@@ -504,22 +469,30 @@ export default function TanongScreen() {
   const handlePressIn = useCallback(() => {
     if (loading) return;
 
+    unlockSpeechSynthesis();
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {}
 
     setMicPhase('recording');
-    startStreamingTranscript();
 
-    // Start audio recorder
+    // Start audio recorder and live bilingual (Filipino + English) speech recognition
     capturedAudioRef.current = null;
-    startRecording((base64Audio) => {
-      if (base64Audio) {
-        capturedAudioRef.current = base64Audio;
+    startRecording(
+      (base64Audio, finalTranscript) => {
+        if (base64Audio) {
+          capturedAudioRef.current = base64Audio;
+        }
+        if (finalTranscript) {
+          setInputQuery(finalTranscript);
+        }
+        // When recording duration auto-expires, trigger seamless finish if still recording
+        handlePressOutRef.current?.();
+      },
+      (liveTranscript) => {
+        setInputQuery(liveTranscript);
       }
-      // When 3-second recording duration auto-expires, trigger seamless finish if still recording
-      handlePressOutRef.current?.();
-    });
+    );
   }, [loading, startRecording]);
 
   // ── Push-To-Talk: Released (Press Out) ──
@@ -530,13 +503,17 @@ export default function TanongScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
 
-    stopStreamingTranscript();
+    const recognizedText = getLatestTranscript().trim() || inputQuery.trim();
+    const capturedAudioBase64 = capturedAudioRef.current || (await stopRecording());
+    capturedAudioRef.current = null;
 
-    // Grab the speech text that was generated in the input box
-    const finalSpeechText =
-      inputQuery.trim() || 'Bakit lumobo ang singil sa kuryente ko ngayong linggo?';
+    if (!capturedAudioBase64 && !recognizedText) {
+      setMicPhase('idle');
+      return;
+    }
 
-    setPourSpeechText(finalSpeechText);
+    const displayMessage = recognizedText || 'Voice message';
+    setPourSpeechText(displayMessage);
 
     // Calculate exact travel distance based on current chat occupancy
     const dynamicDistance = calculateTargetDistance();
@@ -547,15 +524,12 @@ export default function TanongScreen() {
     setMicPhase('pouring');
     setPourActive(true);
 
-    const capturedAudioBase64 = capturedAudioRef.current || (await stopRecording());
-    capturedAudioRef.current = null;
+    const priorHistory = [...chatHistory];
 
     // Commit user message to chat history
-    addChatMessage('user', finalSpeechText);
+    addChatMessage('user', displayMessage);
     setLatestVoiceIndex(chatHistory.length);
 
-    // When chats are filled, automatically scroll a bit BEFORE the message reaches the chat space.
-    // Since loading is false, it scrolls strictly to the user's message without overshooting!
     const userChatsCount = chatHistory.filter((m) => m.sender === 'user').length;
     if (userChatsCount > 0) {
       setTimeout(() => {
@@ -563,10 +537,25 @@ export default function TanongScreen() {
       }, 50);
     }
 
-    // Start API query in background
+    const queryContext = {
+      totalKwh: currentKwh,
+      budget,
+      projected,
+      meterType: activeCanProfile?.meterType,
+      can: activeCanProfile?.accountNumber,
+      profileName: activeCanProfile?.name,
+      language,
+    };
+
+    // Start Gemini API query in background with multi-turn conversation history
     const queryPromise = capturedAudioBase64
-      ? processVoiceQuery(capturedAudioBase64, { totalKwh: currentKwh, budget, projected })
-      : processTextQuery(finalSpeechText, { totalKwh: currentKwh, budget, projected });
+      ? processVoiceQuery(
+          capturedAudioBase64,
+          queryContext,
+          priorHistory,
+          recognizedText || undefined
+        )
+      : processTextQuery(recognizedText, queryContext, priorHistory);
 
     // AI thinking & vocalized response
     try {
@@ -600,13 +589,15 @@ export default function TanongScreen() {
   }, [
     micPhase,
     inputQuery,
+    getLatestTranscript,
     calculateTargetDistance,
     stopRecording,
     addChatMessage,
-    chatHistory.length,
+    chatHistory,
     currentKwh,
     budget,
     projected,
+    activeCanProfile,
   ]);
 
   useEffect(() => {
@@ -617,36 +608,95 @@ export default function TanongScreen() {
     setPourActive(false);
   }, []);
 
-  // ── Standard Text Send ──
-  const handleSendText = async (textToSend?: string) => {
-    const query = (textToSend || inputQuery).trim();
-    if (!query || loading) return;
+  // ── Standard Text Send & AI Handoff ──
+  const handleSendText = useCallback(
+    async (textToSend?: string) => {
+      const query = (textToSend || inputQuery).trim();
+      if (!query || loading) return;
 
-    setInputQuery('');
-    setLatestVoiceIndex(null);
-    addChatMessage('user', query);
+      unlockSpeechSynthesis();
+      const priorHistory = [...chatHistory];
+      setInputQuery('');
+      setLatestVoiceIndex(null);
+      addChatMessage('user', query);
 
-    // Briefly let the user message mount in the chat before popping up the thinking spinner
-    setTimeout(() => {
-      setLoading(true);
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 120);
+      // Briefly let the user message mount in the chat before popping up the thinking spinner
+      setTimeout(() => {
+        setLoading(true);
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 120);
 
-    try {
-      // 1.0s significant thinking delay after prompt
-      const minThinkingDelay = new Promise((resolve) => setTimeout(resolve, 1000));
-      const [response] = await Promise.all([
-        processTextQuery(query, { totalKwh: currentKwh, budget, projected }),
-        minThinkingDelay,
-      ]);
-      addChatMessage('tipi', response);
-    } catch {
-      addChatMessage('tipi', 'Pasensya na, nagkaroon ng aberya. Pakisubukan muli.');
-    } finally {
-      setLoading(false);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      try {
+        // 1.0s significant thinking delay after prompt
+        const minThinkingDelay = new Promise((resolve) => setTimeout(resolve, 1000));
+        const [response] = await Promise.all([
+          processTextQuery(
+            query,
+            {
+              totalKwh: currentKwh,
+              budget,
+              projected,
+              meterType: activeCanProfile?.meterType,
+              can: activeCanProfile?.accountNumber,
+              profileName: activeCanProfile?.name,
+              language,
+            },
+            priorHistory
+          ),
+          minThinkingDelay,
+        ]);
+        addChatMessage('tipi', response);
+        setIsTalking(true);
+        await speakResponse(response);
+        setTimeout(() => setIsTalking(false), 4000);
+      } catch {
+        addChatMessage('tipi', 'Pasensya na, nagkaroon ng aberya. Pakisubukan muli.');
+      } finally {
+        setLoading(false);
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      }
+    },
+    [
+      inputQuery,
+      loading,
+      chatHistory,
+      addChatMessage,
+      currentKwh,
+      budget,
+      projected,
+      activeCanProfile,
+    ]
+  );
+
+  // Automatically execute any prompt handed over from Bill, Home, What-If, Plugs, or Alerts screens
+  useEffect(() => {
+    if (pendingTipiPrompt && !loading) {
+      const promptToRun = pendingTipiPrompt;
+      clearPendingTipiPrompt();
+      handleSendText(promptToRun);
     }
-  };
+  }, [pendingTipiPrompt, loading, clearPendingTipiPrompt, handleSendText]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTtsState((state, text) => {
+      setTtsState(state);
+      setActiveTtsText(text);
+      setIsTalking(state === 'playing');
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const handleReplaySpeech = useCallback(async (text: string) => {
+    unlockSpeechSynthesis();
+    await togglePauseSpeaking(text);
+  }, []);
+
+  const handleStopSpeech = useCallback(() => {
+    stopSpeaking();
+    setIsTalking(false);
+  }, []);
 
   // ── Central Navigation Mic Trigger (Sync) ──
   const handleNavMicTrigger = useCallback(() => {
@@ -668,12 +718,6 @@ export default function TanongScreen() {
     setVoiceRecordingState(isRecording, secondsLeft);
   }, [isRecording, secondsLeft, setVoiceRecordingState]);
 
-  useEffect(() => {
-    return () => {
-      stopStreamingTranscript();
-    };
-  }, []);
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
       <PageTransitionView style={{ flex: 1 }}>
@@ -690,19 +734,65 @@ export default function TanongScreen() {
             />
             <View style={styles.headerInfo}>
               <Text style={[styles.headerTitle, { color: theme.ink, fontSize: 18 * fontScale, fontFamily: 'Coolvetica' }]}>
-                Tanong kay <Text style={{ color: '#FF6B00' }}>Tipi</Text>
+                {isEnglish ? 'Ask ' : 'Tanong kay '}<Text style={{ color: '#FF6B00' }}>Tipi</Text>
               </Text>
               <Text style={[styles.headerSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
               {micPhase === 'recording'
-                ? '🔴 Nakikinig si Tipi... bitawan kapag tapos na'
+                ? isEnglish
+                  ? 'Tipi is listening... release when done'
+                  : 'Nakikinig si Tipi... bitawan kapag tapos na'
                 : micPhase === 'thinking'
-                ? '⏳ Iniisip ni Tipi ang sagot...'
+                ? isEnglish
+                  ? 'Tipi is thinking...'
+                  : 'Iniisip ni Tipi ang sagot...'
+                : ttsState === 'paused'
+                ? isEnglish
+                  ? "Tipi's voice is paused"
+                  : 'Naka-pause ang boses ni Tipi'
                 : isTalking
-                ? '🔊 Nagsasalita si Tipi...'
-                : 'Pindutin at hawakan ang mic para magsalita'}
+                ? isEnglish
+                  ? 'Tipi is speaking...'
+                  : 'Nagsasalita si Tipi...'
+                : isEnglish
+                ? 'Type or hold the mic to ask'
+                : 'Mag-type o pindutin ang mic para magtanong'}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {(ttsState === 'playing' || ttsState === 'paused') && (
+              <TouchableOpacity
+                style={[
+                  styles.headerTtsControlBtn,
+                  { backgroundColor: theme.cont, borderColor: theme.brand },
+                ]}
+                onPress={() => togglePauseSpeaking()}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  ttsState === 'playing'
+                    ? isEnglish
+                      ? "Pause Tipi's voice"
+                      : 'I-pause ang boses ni Tipi'
+                    : isEnglish
+                    ? "Resume Tipi's voice"
+                    : 'Ipagpatuloy ang boses ni Tipi'
+                }
+              >
+                <Text
+                  style={[
+                    styles.headerTtsControlText,
+                    { color: theme.brand, fontSize: 11.5 * fontScale },
+                  ]}
+                >
+                  {ttsState === 'playing'
+                    ? isEnglish
+                      ? 'Pause'
+                      : 'I-pause'
+                    : isEnglish
+                    ? 'Resume'
+                    : 'Ipagpatuloy'}
+                </Text>
+              </TouchableOpacity>
+            )}
             <HeaderAlertButton from="tanong" />
             <HeaderSettingsButton />
           </View>
@@ -712,7 +802,10 @@ export default function TanongScreen() {
         <ScrollView
           ref={scrollViewRef}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.chatScroll}
+          contentContainerStyle={[
+            styles.chatScroll,
+            chatHistory.length === 0 && !loading && styles.emptyScroll,
+          ]}
           onLayout={(e) => {
             scrollViewHeightRef.current = e.nativeEvent.layout.height;
           }}
@@ -721,6 +814,19 @@ export default function TanongScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
+          {chatHistory.length === 0 && !loading && (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, { color: theme.ink, fontSize: 15 * fontScale }]}>
+                {isEnglish ? 'Ask Tipi' : 'Magtanong kay Tipi'}
+              </Text>
+              <Text style={[styles.emptySub, { color: theme.muted, fontSize: 13 * fontScale }]}>
+                {isEnglish
+                  ? 'Type your question below or hold the mic.'
+                  : 'I-type ang iyong tanong sa ibaba o hawakan ang mic.'}
+              </Text>
+            </View>
+          )}
+
           {chatHistory.map((item, index) => {
             const isUser = item.sender === 'user';
             const isLatestVoice = isUser && index === latestVoiceIndex;
@@ -767,6 +873,101 @@ export default function TanongScreen() {
                     >
                       {item.text}
                     </Text>
+                    <View style={styles.ttsBubbleControlsRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.speakReplayBtn,
+                          {
+                            backgroundColor:
+                              activeTtsText === item.text &&
+                              (ttsState === 'playing' || ttsState === 'paused')
+                                ? `${theme.brand}18`
+                                : 'transparent',
+                            borderColor:
+                              activeTtsText === item.text &&
+                              (ttsState === 'playing' || ttsState === 'paused')
+                                ? theme.brand
+                                : 'transparent',
+                          },
+                        ]}
+                        onPress={() => handleReplaySpeech(item.text)}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          activeTtsText === item.text && ttsState === 'playing'
+                            ? 'I-pause ang boses ni Tipi'
+                            : activeTtsText === item.text && ttsState === 'paused'
+                            ? 'Ipagpatuloy ang boses ni Tipi'
+                            : 'Pakinggan ang sagot ni Tipi'
+                        }
+                      >
+                        {activeTtsText === item.text && ttsState === 'playing' ? (
+                          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                            <Rect x="6" y="4" width="4" height="16" rx="1" fill={theme.brand} />
+                            <Rect x="14" y="4" width="4" height="16" rx="1" fill={theme.brand} />
+                          </Svg>
+                        ) : activeTtsText === item.text && ttsState === 'paused' ? (
+                          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                            <Path d="M6 4L20 12L6 20V4Z" fill={theme.brand} />
+                          </Svg>
+                        ) : (
+                          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                            <Path
+                              d="M11 5L6 9H2V15H6L11 19V5Z"
+                              stroke={theme.brand}
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <Path
+                              d="M15.54 8.46C16.4774 9.39764 17.004 10.6692 17.004 11.995C17.004 13.3208 16.4774 14.5924 15.54 15.53"
+                              stroke={theme.brand}
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                          </Svg>
+                        )}
+                        <Text
+                          style={[
+                            styles.speakReplayText,
+                            { color: theme.brand, fontSize: 11.5 * fontScale },
+                          ]}
+                        >
+                          {activeTtsText === item.text && ttsState === 'playing'
+                            ? isEnglish
+                              ? 'Pause'
+                              : 'I-pause'
+                            : activeTtsText === item.text && ttsState === 'paused'
+                            ? isEnglish
+                              ? 'Resume'
+                              : 'Ipagpatuloy'
+                            : isEnglish
+                            ? 'Listen'
+                            : 'Pakinggan'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {activeTtsText === item.text &&
+                        (ttsState === 'playing' || ttsState === 'paused') && (
+                          <TouchableOpacity
+                            style={styles.stopSpeechBtn}
+                            onPress={handleStopSpeech}
+                            accessibilityRole="button"
+                            accessibilityLabel={isEnglish ? "Stop Tipi's voice" : 'Ihinto ang boses ni Tipi'}
+                          >
+                            <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                              <Rect x="5" y="5" width="14" height="14" rx="2" fill={theme.muted} />
+                            </Svg>
+                            <Text
+                              style={[
+                                styles.speakReplayText,
+                                { color: theme.muted, fontSize: 11 * fontScale },
+                              ]}
+                            >
+                              {isEnglish ? 'Stop' : 'Ihinto'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                    </View>
                   </View>
                 )}
               </Animated.View>
@@ -796,7 +997,7 @@ export default function TanongScreen() {
                 <View style={styles.thinkingRow}>
                   <ActivityIndicator size="small" color={theme.brand} />
                   <Text style={[styles.thinkingText, { color: theme.muted, fontSize: 12 * fontScale }]}>
-                    Inaanalisa ang iyong kuryente...
+                    {isEnglish ? 'Analyzing your electricity usage...' : 'Inaanalisa ang iyong kuryente...'}
                   </Text>
                 </View>
               </View>
@@ -804,22 +1005,6 @@ export default function TanongScreen() {
           )}
         </ScrollView>
 
-        {/* Suggestion Chips */}
-        <View style={styles.chipsRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {SUGGESTION_CHIPS.map((chip, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={[styles.chip, { backgroundColor: theme.surface, borderColor: '#FF6B002B' }]}
-                onPress={() => handleSendText(chip)}
-              >
-                <Text style={[styles.chipText, { color: theme.ink, fontSize: 12 * fontScale, fontFamily: 'Coolvetica' }]}>
-                  {chip}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
 
         {/* Chat Input Bar */}
         <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.line }]}>
@@ -844,7 +1029,11 @@ export default function TanongScreen() {
               ]}
               placeholder={
                 micPhase === 'recording'
-                  ? 'Nakikinig si Tipi... magsalita ka na'
+                  ? isEnglish
+                    ? 'Tipi is listening... speak now'
+                    : 'Nakikinig si Tipi... magsalita ka na'
+                  : isEnglish
+                  ? 'Type or hold the mic...'
                   : 'Mag-type o hawakan ang mic...'
               }
               placeholderTextColor={micPhase === 'recording' ? ORANGE_RED_GLOW : theme.muted}
@@ -875,9 +1064,15 @@ export default function TanongScreen() {
               accessibilityRole="button"
               accessibilityLabel="Ipadala ang tanong"
             >
-              <Text style={[styles.sendBtnText, { color: theme.brandInk, fontSize: 15 * fontScale }]}>
-                ➤
-              </Text>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M5 12H19M19 12L13 6M19 12L13 18"
+                  stroke={theme.brandInk}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
             </TouchableOpacity>
           )}
         </View>
@@ -925,11 +1120,38 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   headerTitle: { fontWeight: '400', letterSpacing: 0.2 },
   headerSub: { fontWeight: '400', marginTop: 2 },
+  headerTtsControlBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  headerTtsControlText: {
+    fontWeight: '800',
+  },
 
   chatScroll: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 10,
+  },
+  emptyScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 6,
+  },
+  emptyTitle: {
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  emptySub: {
+    fontWeight: '500',
+    textAlign: 'center',
   },
   messageRow: {
     flexDirection: 'row',
@@ -962,6 +1184,32 @@ const styles = StyleSheet.create({
   userBubble: { borderBottomRightRadius: 4 },
   tipiBubble: { borderBottomLeftRadius: 4, borderWidth: 1 },
   bubbleText: { lineHeight: 20, fontWeight: '500' },
+  ttsBubbleControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  speakReplayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  stopSpeechBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  speakReplayText: {
+    fontWeight: '700',
+  },
 
   // Thinking state
   thinkingRow: {

@@ -39,34 +39,73 @@ export const BillVerificationDrawer: React.FC<BillVerificationDrawerProps> = ({
   const [totalKwh, setTotalKwh] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [generationCharge, setGenerationCharge] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
-    const loggedInCan =
-      data?.customerAccountNumber ||
-      (user?.can ? formatCANDisplay(user.can) : null) ||
-      MOCK_USER.accountNumber;
-    setCan(loggedInCan);
+    setValidationError('');
     if (data) {
-      setStartDate(data.billingPeriod?.startDate || '2026-04-15');
-      setEndDate(data.billingPeriod?.endDate || '2026-05-14');
-      setDueDate(data.dueDate || '2026-05-25');
-      setTotalKwh(data.totalKwh?.toString() || '215');
-      setTotalAmount(data.totalAmountDue?.toString() || '2450.50');
-      setGenerationCharge(data.generationCharge?.toString() || '1414.95');
+      setCan(data.customerAccountNumber || (user?.can ? formatCANDisplay(user.can) : ''));
+      setStartDate(data.billingPeriod?.startDate || '');
+      setEndDate(data.billingPeriod?.endDate || '');
+      setDueDate(data.dueDate || '');
+      setTotalKwh(
+        typeof data.totalKwh === 'number' && data.totalKwh > 0 ? data.totalKwh.toString() : ''
+      );
+      setTotalAmount(
+        typeof data.totalAmountDue === 'number' && data.totalAmountDue > 0
+          ? data.totalAmountDue.toString()
+          : ''
+      );
+      setGenerationCharge(
+        typeof data.generationCharge === 'number' && data.generationCharge > 0
+          ? data.generationCharge.toString()
+          : ''
+      );
+    } else {
+      setCan(user?.can ? formatCANDisplay(user.can) : '');
+      setStartDate('');
+      setEndDate('');
+      setDueDate('');
+      setTotalKwh('');
+      setTotalAmount('');
+      setGenerationCharge('');
     }
-  }, [data]);
+  }, [data, user?.can]);
 
   const handleSave = () => {
+    const canDigits = can.replace(/\D/g, '');
+    const kwhVal = parseFloat(totalKwh);
+    const amountVal = parseFloat(totalAmount);
+    const genVal = generationCharge.trim() ? parseFloat(generationCharge) : undefined;
+
+    if (canDigits.length < 10) {
+      setValidationError('Ilagay ang wastong 10-12 digit Customer Account Number (CAN).');
+      return;
+    }
+    if (!Number.isFinite(kwhVal) || kwhVal <= 0) {
+      setValidationError('Ilagay ang wastong Kabuuang Konsumo (kWh).');
+      return;
+    }
+    if (!Number.isFinite(amountVal) || amountVal <= 0) {
+      setValidationError('Ilagay ang wastong Halaga ng Bill (₱).');
+      return;
+    }
+    if (!dueDate.trim()) {
+      setValidationError('Ilagay ang Due Date ng bill (YYYY-MM-DD).');
+      return;
+    }
+
+    setValidationError('');
     const updated: ExtractedBillData = {
-      customerAccountNumber: can,
+      customerAccountNumber: can.trim(),
       billingPeriod: {
-        startDate,
-        endDate,
+        startDate: startDate.trim(),
+        endDate: endDate.trim(),
       },
-      dueDate,
-      totalKwh: parseFloat(totalKwh) || 0,
-      totalAmountDue: parseFloat(totalAmount) || 0,
-      generationCharge: parseFloat(generationCharge) || undefined,
+      dueDate: dueDate.trim(),
+      totalKwh: kwhVal,
+      totalAmountDue: amountVal,
+      generationCharge: genVal !== undefined && Number.isFinite(genVal) ? genVal : undefined,
       verifiedByUser: true,
     };
     onConfirm(updated);
@@ -158,6 +197,29 @@ export const BillVerificationDrawer: React.FC<BillVerificationDrawerProps> = ({
               />
             </View>
 
+            {/* Generation Charge */}
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: theme.ink, fontSize: 14 * fontScale }]}>
+                Generation Charge (₱)
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.bg,
+                    borderColor: theme.line,
+                    color: theme.ink,
+                    fontSize: 15 * fontScale,
+                  },
+                ]}
+                value={generationCharge}
+                onChangeText={setGenerationCharge}
+                placeholder="Hal. 1414.95"
+                placeholderTextColor={theme.muted}
+                keyboardType="numeric"
+              />
+            </View>
+
             {/* Dates Row */}
             <View style={styles.row}>
               <View style={[styles.fieldGroup, { flex: 1 }]}>
@@ -182,7 +244,7 @@ export const BillVerificationDrawer: React.FC<BillVerificationDrawerProps> = ({
               </View>
               <View style={[styles.fieldGroup, { flex: 1 }]}>
                 <Text style={[styles.fieldLabel, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                  Due Date
+                  End Date
                 </Text>
                 <TextInput
                   style={[
@@ -194,13 +256,40 @@ export const BillVerificationDrawer: React.FC<BillVerificationDrawerProps> = ({
                       fontSize: 14 * fontScale,
                     },
                   ]}
-                  value={dueDate}
-                  onChangeText={setDueDate}
+                  value={endDate}
+                  onChangeText={setEndDate}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor={theme.muted}
                 />
               </View>
             </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: theme.ink, fontSize: 13 * fontScale }]}>
+                Due Date
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.bg,
+                    borderColor: theme.line,
+                    color: theme.ink,
+                    fontSize: 14 * fontScale,
+                  },
+                ]}
+                value={dueDate}
+                onChangeText={setDueDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={theme.muted}
+              />
+            </View>
+
+            {validationError ? (
+              <Text style={{ color: theme.danger, fontSize: 12.5 * fontScale, fontWeight: '600', marginTop: 4 }}>
+                {validationError}
+              </Text>
+            ) : null}
           </ScrollView>
 
           <View style={styles.actions}>
