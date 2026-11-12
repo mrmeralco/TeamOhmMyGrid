@@ -123,16 +123,36 @@ export async function extractAnalogMeterReading(
 ): Promise<AnalogMeterReadingResult> {
   if (GEMINI_API_KEY && photoBase64 && photoBase64.length > 50) {
     try {
-      const prompt = `You are an expert at reading Philippine analog electromechanical and cyclometer electric meters.
-Extract the 5-dial or 5-digit cyclometer reading.
-Dials run from 10,000s, 1,000s, 100s, 10s, 1s (left to right).
-If a pointer is between numbers, always choose the smaller number.
-Provide the 5 individual digits as an array [d1, d2, d3, d4, d5], cumulative kWh reading, meterType ('dial' or 'cyclometer'), and confidence score (0.0 to 1.0).
+      const prompt = `You are an expert visual analyzer and OCR reader for Philippine electric utility meters (specifically Meralco meters, both electromechanical dial meters and electronic/cyclometer digital meters).
+
+TASK:
+1. First, inspect the image to determine if an electric meter (either electromechanical dial meter or electronic digital/cyclometer meter) is present and clearly identifiable.
+2. If the image does NOT show an electric meter (e.g. it is a person, pet, room, document, random object, landscape), OR if the image is too blurry, dark, glary, distorted, obstructed, or unreadable to reliably extract the meter digits:
+   - Set "isMeterDetected": false
+   - Set "confidence": 0.0 to 0.4
+   - Set "failureReason": "not_a_meter" (if not an electric meter) or "blurry" (if too blurry, glary, or unreadable)
+   - Set "readingKwh": 0 and "dials": [0,0,0,0,0]
+3. If an electric meter IS clearly detected and readable:
+   - Set "isMeterDetected": true
+   - Classify the meter category:
+     * Set "meterCategory": "electronic" (for meters with a digital LCD display showing digits) OR "electromechanical" (for meters with round dial faces and needle pointers, or mechanical drums).
+   - Identify meterType: "dial" (for electromechanical dial pointer meters) or "cyclometer" (for digital/electronic LCD or mechanical drum meters)
+   - For electromechanical dial meters, detect whether there are 4 dials or 5 dials on the meter face:
+     * Set "dialCount": 4 or 5
+     * If there are ONLY 4 DIALS: The dials correspond to [1,000s, 100s, 10s, 1s]. Therefore, the first digit (10,000s position) MUST strictly be 0. So the 5 digits array must be [0, d2, d3, d4, d5].
+     * If there are 5 dials: Extract all 5 digits [d1, d2, d3, d4, d5] representing [10,000s, 1,000s, 100s, 10s, 1s].
+   - If a pointer is between numbers, always choose the smaller number.
+   - Set "confidence": between 0.70 and 1.0 depending on clarity.
+
 Return strictly valid JSON with this schema:
 {
-  "meterType": "dial",
-  "readingKwh": 14285,
-  "dials": [1, 4, 2, 8, 5],
+  "isMeterDetected": true,
+  "failureReason": null,
+  "meterCategory": "electronic",
+  "meterType": "cyclometer",
+  "dialCount": 5,
+  "readingKwh": 3456,
+  "dials": [0, 3, 4, 5, 6],
   "confidence": 0.95
 }`;
 
@@ -194,26 +214,65 @@ Return strictly valid JSON with this schema:
         const candidateText = json.candidates?.[0]?.content?.parts?.[0]?.text;
         if (candidateText) {
           const parsed = JSON.parse(candidateText);
+          const isMeterDetected = parsed.isMeterDetected !== false;
+          const failureReason = parsed.failureReason || (isMeterDetected ? undefined : 'not_a_meter');
+
+          // If meter was not detected or confidence is explicitly low
+          if (!isMeterDetected || parsed.confidence < 0.6) {
+            return {
+              meterType: preferredMeterType,
+              readingKwh: 0,
+              dials: [0, 0, 0, 0, 0],
+              confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.2,
+              isMeterDetected: false,
+              failureReason: failureReason || 'not_a_meter',
+              rawExtractionSource: 'gemini_vision',
+            };
+          }
+
           const meterType: AnalogMeterType =
             parsed.meterType === 'cyclometer' ? 'cyclometer' : 'dial';
-          const dials: number[] =
+
+          const dialCount: 4 | 5 =
+            meterType === 'dial' && (parsed.dialCount === 4 || parsed.dialCount === 5)
+              ? parsed.dialCount
+              : 5;
+
+          let dials: number[] =
             Array.isArray(parsed.dials) && parsed.dials.length === 5
               ? parsed.dials.map((n: number) => Math.max(0, Math.min(9, Math.floor(n))))
               : kwhToDials(typeof parsed.readingKwh === 'number' ? parsed.readingKwh : 14285);
+
+          // If electromechanical meter has only 4 dials, the first digit (10,000s) MUST be 0
+          if (meterType === 'dial' && dialCount === 4) {
+            dials[0] = 0;
+          }
+
           const readingKwh =
             typeof parsed.readingKwh === 'number' && Number.isFinite(parsed.readingKwh)
-              ? parsed.readingKwh
+              ? dialCount === 4
+                ? dialsToKwh(dials)
+                : parsed.readingKwh
               : dialsToKwh(dials);
+
           const confidence =
             typeof parsed.confidence === 'number' && parsed.confidence > 0
               ? Math.min(1, parsed.confidence)
               : 0.95;
 
+          const detectedMeterCategory: 'electronic' | 'electromechanical' =
+            parsed.meterCategory === 'electronic' || parsed.meterType === 'cyclometer'
+              ? 'electronic'
+              : 'electromechanical';
+
           return {
             meterType,
+            detectedMeterCategory,
+            dialCount,
             readingKwh,
             dials,
             confidence,
+            isMeterDetected: true,
             rawExtractionSource: 'gemini_vision',
           };
         }
@@ -236,9 +295,12 @@ Return strictly valid JSON with this schema:
     const confidence = Math.round((0.92 + ((photoHash % 7) / 100)) * 100) / 100;
     return {
       meterType: resolvedType,
+      detectedMeterCategory: resolvedType === 'cyclometer' ? 'electronic' : 'electromechanical',
+      dialCount: 4,
       readingKwh,
       dials,
       confidence,
+      isMeterDetected: true,
       rawExtractionSource: 'deterministic_simulation',
     };
   }
@@ -248,9 +310,12 @@ Return strictly valid JSON with this schema:
   const dials = kwhToDials(baselineKwh);
   return {
     meterType: resolvedType,
+    detectedMeterCategory: resolvedType === 'cyclometer' ? 'electronic' : 'electromechanical',
+    dialCount: 4,
     readingKwh: baselineKwh,
     dials,
     confidence: 0.94,
+    isMeterDetected: true,
     rawExtractionSource: 'deterministic_simulation',
   };
 }

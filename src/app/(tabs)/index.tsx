@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useEnergy } from '../../context/EnergyContext';
@@ -79,6 +81,14 @@ export default function HomeScreen() {
   // Analog Modal & Drawer State
   const [guideModalVisible, setGuideModalVisible] = useState<boolean>(false);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
+  const [detectionFailedVisible, setDetectionFailedVisible] = useState<boolean>(false);
+  const [detectionFailureReason, setDetectionFailureReason] = useState<
+    'not_a_meter' | 'blurry' | 'unreadable' | 'low_confidence' | undefined
+  >(undefined);
+  const [detectedCategory, setDetectedCategory] = useState<
+    'electronic' | 'electromechanical' | undefined
+  >(undefined);
+  const [detectedDialCount, setDetectedDialCount] = useState<4 | 5 | undefined>(undefined);
   const [capturing, setCapturing] = useState<boolean>(false);
   const [analogSubtype, setAnalogSubtype] = useState<AnalogMeterType>('dial');
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | undefined>(undefined);
@@ -122,25 +132,53 @@ export default function HomeScreen() {
           activeSubtype
         );
 
+        // Automatically record detected category and dial count from photo analysis
+        if (extracted.detectedMeterCategory && extracted.detectedMeterCategory !== 'unknown') {
+          setDetectedCategory(extracted.detectedMeterCategory);
+        }
+        if (extracted.dialCount) {
+          setDetectedDialCount(extracted.dialCount);
+        }
+
+        // If an electric meter was not detected or the photo is too blurry/low confidence
+        if (
+          extracted.isMeterDetected === false ||
+          (typeof extracted.confidence === 'number' && extracted.confidence < 0.6)
+        ) {
+          setDetectionFailureReason(extracted.failureReason || 'not_a_meter');
+          setDetectionFailedVisible(true);
+          return;
+        }
+
         setAnalogSubtype(extracted.meterType || activeSubtype);
         setPendingReadingKwh(extracted.readingKwh);
         setPendingDials(extracted.dials);
         setDrawerVisible(true);
       }
     } catch {
-      Alert.alert('Paalala', 'Hindi matagumpay ang pagkuha ng litrato ng meter.');
+      Alert.alert(
+        isEnglish ? 'Notice' : 'Paalala',
+        isEnglish
+          ? 'Failed to capture or process meter photo.'
+          : 'Hindi matagumpay ang pagkuha ng litrato ng meter.'
+      );
     } finally {
       setCapturing(false);
     }
   };
 
-  // Manual encode trigger for analog meters
+  // Manual encode trigger for analog meters -> Go to new multi-step manual input screen
   const handleManualAnalogInput = () => {
     const prev = weeklySummary?.currentReadingKwh || activeCanProfile?.currentKwh || 14240;
-    setPendingReadingKwh(prev);
-    setPendingDials(kwhToDials(prev));
-    setPendingPhotoUri(undefined);
-    setDrawerVisible(true);
+    router.push({
+      pathname: '/manual-meter-input',
+      params: {
+        previousReading: String(prev),
+        can: canNumber || '',
+        autoDetectedType: detectedCategory || (analogSubtype === 'cyclometer' ? 'electronic' : 'electromechanical'),
+        dialCount: detectedDialCount ? String(detectedDialCount) : undefined,
+      },
+    });
   };
 
   // Save confirmed reading from verification drawer
@@ -159,11 +197,16 @@ export default function HomeScreen() {
       setDrawerVisible(false);
       await loadAnalogSummary();
       Alert.alert(
-        'Tagumpay',
-        `Nai-save ang analog reading: ${entry.readingKwh.toLocaleString()} kWh (+${entry.normalizedWeeklyKwh} kWh/linggo).`
+        isEnglish ? 'Success' : 'Tagumpay',
+        isEnglish
+          ? `Saved analog reading: ${entry.readingKwh.toLocaleString()} kWh (+${entry.normalizedWeeklyKwh} kWh/wk).`
+          : `Nai-save ang analog reading: ${entry.readingKwh.toLocaleString()} kWh (+${entry.normalizedWeeklyKwh} kWh/linggo).`
       );
     } catch {
-      Alert.alert('Error', 'Hindi nai-save ang analog reading.');
+      Alert.alert(
+        'Error',
+        isEnglish ? 'Failed to save analog reading.' : 'Hindi nai-save ang analog reading.'
+      );
     }
   };
 
@@ -420,7 +463,110 @@ export default function HomeScreen() {
         onConfirm={handleConfirmAnalogLog}
         onRetake={() => handleCaptureAnalogPhoto()}
         onCancel={() => setDrawerVisible(false)}
+        onOpenGuide={() => setGuideModalVisible(true)}
       />
+
+      {/* Detection Failed Modal */}
+      <Modal
+        visible={detectionFailedVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetectionFailedVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.failModalCard, { backgroundColor: theme.surface, borderColor: '#FF6B0040' }]}>
+            {/* Camera with X badge (increased by 50% for high visibility: 64 -> 96) */}
+            <View style={styles.failIconContainer}>
+              <Svg width={96} height={96} viewBox="0 0 64 64">
+                <Circle cx="32" cy="32" r="30" fill="#FF3B1D15" stroke="#FF3B1D30" strokeWidth="2" />
+                {/* Camera body */}
+                <Rect x="16" y="22" width="32" height="24" rx="4" fill="none" stroke="#FF3B1D" strokeWidth="2.5" />
+                <Path d="M24 22 L26 17 L38 17 L40 22 Z" fill="none" stroke="#FF3B1D" strokeWidth="2" />
+                <Circle cx="32" cy="34" r="7" fill="none" stroke="#FF3B1D" strokeWidth="2.2" />
+                {/* Red cross on corner */}
+                <Circle cx="46" cy="20" r="7" fill="#FF3B1D" />
+                <Line x1="43" y1="17" x2="49" y2="23" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                <Line x1="49" y1="17" x2="43" y2="23" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </View>
+
+            <Text style={[styles.failTitle, { color: theme.ink, fontSize: 19 * fontScale, fontFamily: 'Coolvetica' }]}>
+              {detectionFailureReason === 'blurry'
+                ? isEnglish
+                  ? 'Photo Too Blurry'
+                  : 'Masyadong Malabo ang Litrato'
+                : isEnglish
+                  ? 'No Meter Detected'
+                  : 'Hindi Na-detect ang Meter'}
+            </Text>
+            <Text style={[styles.failSubtitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
+              {detectionFailureReason === 'blurry'
+                ? isEnglish
+                  ? 'The photo is too blurry or glary to read the meter dials clearly. Please hold steady with good lighting, or input the numbers manually.'
+                  : 'Masyadong malabo o masilaw ang litrato para basahin ang mga dial ng metro. Pakitapat nang maayos o manu-manong ilagay ang numero.'
+                : isEnglish
+                  ? "The camera couldn't detect an electric meter (electronic or electromechanical) in this photo. Make sure to take a clear, direct shot of your meter."
+                  : 'Hindi nakakita ng metro ng kuryente (elektroniko man o electromechanical) sa litratong ito. Siguraduhing nakatutok ang camera sa iyong metro.'}
+            </Text>
+
+            {/* 3 Action Buttons */}
+            <View style={styles.failActionsCol}>
+              {/* 1. Retake */}
+              <TouchableOpacity
+                style={[styles.retakeActionBtn, { backgroundColor: '#FF6B00' }]}
+                onPress={() => {
+                  setDetectionFailedVisible(false);
+                  setTimeout(() => {
+                    handleCaptureAnalogPhoto();
+                  }, 250);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Retake photo"
+              >
+                <Text style={[styles.retakeActionText, { color: '#FFFFFF', fontSize: 14.5 * fontScale }]}>
+                  {isEnglish ? 'Retake Photo' : 'Kumuha Muli ng Litrato'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* 2. Enter Manually */}
+              <TouchableOpacity
+                style={[styles.manualActionBtn, { borderColor: '#FF6B00', backgroundColor: theme.cont }]}
+                onPress={() => {
+                  setDetectionFailedVisible(false);
+                  const prev = weeklySummary?.currentReadingKwh || activeCanProfile?.currentKwh || 14240;
+                  router.push({
+                    pathname: '/manual-meter-input',
+                    params: {
+                      previousReading: String(prev),
+                      can: canNumber || '',
+                      autoDetectedType: detectedCategory || (analogSubtype === 'cyclometer' ? 'electronic' : 'electromechanical'),
+                      dialCount: detectedDialCount ? String(detectedDialCount) : undefined,
+                    },
+                  });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Enter manually"
+              >
+                <Text style={[styles.manualActionText, { color: '#FF6B00', fontSize: 14 * fontScale }]}>
+                  {isEnglish ? 'Input Data Manually' : 'Manu-manong Ilagay ang Data'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* 3. Cancel */}
+              <TouchableOpacity
+                style={styles.cancelActionBtn}
+                onPress={() => setDetectionFailedVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={[styles.cancelActionText, { color: theme.muted, fontSize: 13.5 * fontScale }]}>
+                  {isEnglish ? 'Cancel' : 'Kanselahin'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -570,5 +716,72 @@ const styles = StyleSheet.create({
   },
   secondarySub: {
     lineHeight: 18,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  failModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 22,
+    alignItems: 'center',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  failIconContainer: {
+    marginBottom: 14,
+  },
+  failTitle: {
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  failSubtitle: {
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  failActionsCol: {
+    width: '100%',
+    gap: 10,
+  },
+  retakeActionBtn: {
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  retakeActionText: {
+    fontWeight: '800',
+  },
+  manualActionBtn: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  manualActionText: {
+    fontWeight: '800',
+  },
+  cancelActionBtn: {
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  cancelActionText: {
+    fontWeight: '600',
   },
 });

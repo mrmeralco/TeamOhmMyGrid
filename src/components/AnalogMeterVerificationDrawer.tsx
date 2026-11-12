@@ -11,6 +11,8 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import Svg, { Circle, Line, G, Text as SvgText, Rect, Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../context/ThemeContext';
 import { AnalogMeterLogEntry, AnalogMeterType } from '../types/analogMeter';
 import {
@@ -32,6 +34,7 @@ export interface AnalogMeterVerificationDrawerProps {
   onConfirm: (entry: AnalogMeterLogEntry) => void;
   onRetake: () => void;
   onCancel: () => void;
+  onOpenGuide?: () => void;
   testID?: string;
 }
 
@@ -42,6 +45,103 @@ const ELAPSED_WEEK_OPTIONS = [
   { days: 21, label: '3 Linggo (21d)' },
   { days: 28, label: '4 Linggo (28d)' },
 ];
+
+// Reusable SVG illustration: Dial meter face
+const ElectromechanicalMeterGraphic = ({ size = 180 }: { size?: number }) => (
+  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+    <Svg width={size} height={size} viewBox="0 0 160 160">
+      <Circle cx="80" cy="80" r="72" fill="#DCE7DD" stroke="#9EABA0" strokeWidth="6" />
+      <Circle cx="80" cy="80" r="66" fill="#EEF4EF" stroke="#CAD5CB" strokeWidth="2" />
+      <Circle cx="80" cy="38" r="8" fill="#1B1B1B" />
+      <Path
+        d="M 75 42 L 77 34 L 80 38 L 83 34 L 85 42"
+        stroke="#FFFFFF"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Line x1="40" y1="38" x2="66" y2="38" stroke="#333333" strokeWidth="2" />
+      <Line x1="94" y1="38" x2="120" y2="38" stroke="#333333" strokeWidth="2" />
+      <Circle cx="40" cy="68" r="10" fill="#2E3830" />
+      {/* 4 Clock Dials */}
+      <G transform="translate(62, 68)">
+        <Circle cx="0" cy="0" r="9" fill="#FFFFFF" stroke="#5D6D60" strokeWidth="1.2" />
+        <Line x1="0" y1="0" x2="-5" y2="-4" stroke="#D32F2F" strokeWidth="1.6" strokeLinecap="round" />
+        <Circle cx="0" cy="0" r="1.5" fill="#1C1C1C" />
+      </G>
+      <G transform="translate(84, 68)">
+        <Circle cx="0" cy="0" r="9" fill="#FFFFFF" stroke="#5D6D60" strokeWidth="1.2" />
+        <Line x1="0" y1="0" x2="5" y2="-4" stroke="#D32F2F" strokeWidth="1.6" strokeLinecap="round" />
+        <Circle cx="0" cy="0" r="1.5" fill="#1C1C1C" />
+      </G>
+      <G transform="translate(106, 68)">
+        <Circle cx="0" cy="0" r="9" fill="#FFFFFF" stroke="#5D6D60" strokeWidth="1.2" />
+        <Line x1="0" y1="0" x2="-4" y2="4" stroke="#D32F2F" strokeWidth="1.6" strokeLinecap="round" />
+        <Circle cx="0" cy="0" r="1.5" fill="#1C1C1C" />
+      </G>
+      <G transform="translate(128, 68)">
+        <Circle cx="0" cy="0" r="9" fill="#FFFFFF" stroke="#5D6D60" strokeWidth="1.2" />
+        <Line x1="0" y1="0" x2="4" y2="4" stroke="#D32F2F" strokeWidth="1.6" strokeLinecap="round" />
+        <Circle cx="0" cy="0" r="1.5" fill="#1C1C1C" />
+      </G>
+      <SvgText x="80" y="92" fill="#2E3B30" fontSize="7" fontWeight="bold" textAnchor="middle">
+        KILOWATTHOURS
+      </SvgText>
+      <Rect x="44" y="104" width="72" height="32" rx="3" fill="#DDE7DF" stroke="#B8C5BA" strokeWidth="1" />
+      <SvgText x="80" y="117" fill="#1E2820" fontSize="7.5" fontWeight="bold" textAnchor="middle">
+        33CZN23688
+      </SvgText>
+      <SvgText x="80" y="128" fill="#1E2820" fontSize="7.5" fontWeight="bold" textAnchor="middle">
+        89 023 688
+      </SvgText>
+    </Svg>
+  </View>
+);
+
+// Reusable SVG illustration: Smaller number pointer rule
+const DialExplanationGraphic = ({ chosenNumber = 4 }: { chosenNumber?: number }) => (
+  <View style={{ alignItems: 'center', marginVertical: 8 }}>
+    <Svg width={250} height={175} viewBox="0 0 180 130">
+      <Circle cx="90" cy="65" r="50" fill="#F4F8F4" stroke="#4C6350" strokeWidth="3" />
+      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+        const angle = (num * 36 - 90) * (Math.PI / 180);
+        const x = 90 + 38 * Math.cos(angle);
+        const y = 65 + 38 * Math.sin(angle) + 4;
+        const isChosen = num === chosenNumber;
+        return (
+          <SvgText
+            key={num}
+            x={x}
+            y={y}
+            fill={isChosen ? '#FF3B1D' : '#334436'}
+            fontSize={isChosen ? '14' : '10'}
+            fontWeight={isChosen ? '900' : '600'}
+            textAnchor="middle"
+          >
+            {num}
+          </SvgText>
+        );
+      })}
+      <G transform="translate(90, 65)">
+        <Line x1="0" y1="0" x2="24" y2="20" stroke="#111812" strokeWidth="3" strokeLinecap="round" />
+        <Circle cx="0" cy="0" r="4" fill="#111812" />
+      </G>
+      <G transform="translate(138, 94)">
+        <Path
+          d="M 24 10 L 0 0 M 8 -5 L 0 0 L 6 6"
+          stroke="#FF3B1D"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <SvgText x="28" y="14" fill="#FF3B1D" fontSize="10" fontWeight="bold">
+          Record {chosenNumber}!
+        </SvgText>
+      </G>
+    </Svg>
+  </View>
+);
 
 export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDrawerProps> = ({
   visible,
@@ -56,15 +156,18 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
   onConfirm,
   onRetake,
   onCancel,
+  onOpenGuide,
   testID = 'analog-verification-drawer',
 }) => {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, language } = useTheme();
+  const isEnglish = language === 'english';
 
   const [dials, setDials] = useState<number[]>([1, 4, 2, 8, 5]);
   const [kwhInput, setKwhInput] = useState<string>('14285');
   const [photoExpanded, setPhotoExpanded] = useState<boolean>(false);
   const [selectedMeterType, setSelectedMeterType] = useState<AnalogMeterType>(initialMeterType);
   const [selectedDaysElapsed, setSelectedDaysElapsed] = useState<number>(initialDaysElapsed);
+  const [guideModalVisible, setGuideModalVisible] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialDials && initialDials.length === 5) {
@@ -149,19 +252,21 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <Text style={[styles.title, { color: theme.ink, fontSize: 18 * fontScale }]}>
-                Suriin at I-verify ang Reading
+                {isEnglish ? 'Review & Verify Reading' : 'Suriin at I-verify ang Reading'}
               </Text>
               <TouchableOpacity
                 onPress={onCancel}
                 accessibilityRole="button"
-                accessibilityLabel="Kanselahin ang verification"
+                accessibilityLabel={isEnglish ? 'Cancel verification' : 'Kanselahin ang verification'}
                 style={[styles.closeMiniBtn, { backgroundColor: theme.cont }]}
               >
                 <Text style={[styles.closeMiniText, { color: theme.muted }]}>✕</Text>
               </TouchableOpacity>
             </View>
             <Text style={[styles.subtitle, { color: theme.muted, fontSize: 12.5 * fontScale }]}>
-              I-tsek ang 5 dial laban sa litrato bago i-save ang lingguhang konsumo.
+              {isEnglish
+                ? 'Check the dials against the photo before saving weekly usage.'
+                : 'I-tsek ang mga dial laban sa litrato bago i-save ang lingguhang konsumo.'}
             </Text>
           </View>
 
@@ -197,7 +302,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
             {/* Meter Subtype & Elapsed Weeks Controls */}
             <View style={[styles.cardSection, { backgroundColor: theme.cont, borderColor: theme.line }]}>
               <Text style={[styles.sectionTitle, { color: theme.ink, fontSize: 13 * fontScale }]}>
-                Uri ng Analog Meter
+                {isEnglish ? 'Analog Meter Type' : 'Uri ng Analog Meter'}
               </Text>
               <View style={styles.pillToggleRow}>
                 <TouchableOpacity
@@ -247,11 +352,14 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
               </View>
 
               <Text style={[styles.sectionTitle, { color: theme.ink, fontSize: 13 * fontScale, marginTop: 10 }]}>
-                Lumipas na Linggo (Missed Weeks Handling)
+                {isEnglish ? 'Elapsed Weeks (Missed Weeks Handling)' : 'Lumipas na Linggo (Missed Weeks Handling)'}
               </Text>
               <View style={styles.pillToggleRow}>
                 {ELAPSED_WEEK_OPTIONS.map((opt) => {
                   const active = selectedDaysElapsed === opt.days;
+                  const labelText = isEnglish
+                    ? `${opt.days / 7} ${opt.days === 7 ? 'Week' : 'Weeks'} (${opt.days}d)`
+                    : opt.label;
                   return (
                     <TouchableOpacity
                       key={opt.days}
@@ -273,7 +381,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                           fontSize: 10.5 * fontScale,
                         }}
                       >
-                        {opt.label}
+                        {labelText}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -283,13 +391,35 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
 
             {/* Interactive 5-Dial / 5-Drum Steppers */}
             <View style={[styles.cardSection, { backgroundColor: theme.cont, borderColor: theme.line }]}>
-              <Text style={[styles.sectionTitle, { color: theme.ink, fontSize: 13.5 * fontScale }]}>
-                {selectedMeterType === 'cyclometer'
-                  ? 'Interactive 5-Drum Cyclometer Pickers'
-                  : 'Interactive 5-Dial Pickers'}
-              </Text>
+              <View style={styles.sectionTitleWithGuideRow}>
+                <Text style={[styles.sectionTitle, { color: theme.ink, fontSize: 13.5 * fontScale, flex: 1 }]}>
+                  {selectedMeterType === 'cyclometer'
+                    ? 'Interactive 5-Drum Cyclometer Pickers'
+                    : 'Interactive 5-Dial Pickers'}
+                </Text>
+
+                {/* View Instructions Button for cross-checking electromechanical dials */}
+                {selectedMeterType === 'dial' && (
+                  <TouchableOpacity
+                    style={[styles.guideCrossCheckBtn, { borderColor: '#FF6B00', backgroundColor: theme.surface }]}
+                    onPress={() => {
+                      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+                      setGuideModalVisible(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={isEnglish ? 'View how to read dials' : 'Tingnan ang gabay sa pagbasa'}
+                  >
+                    <Text style={[styles.guideCrossCheckText, { color: '#FF6B00', fontSize: 11 * fontScale }]}>
+                      {isEnglish ? 'How to Read Dials' : 'Paano Basahin'} ➔
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <Text style={[styles.sectionHint, { color: theme.muted, fontSize: 11.5 * fontScale }]}>
-                Pindutin ang + o - upang itugma ang bawat dial sa litrato
+                {isEnglish
+                  ? 'Press + or - to match each dial to the photo. If needle is between numbers, choose the smaller number.'
+                  : 'Pindutin ang + o - upang itugma ang bawat dial sa litrato. Kung nasa pagitan, piliin ang mas maliit.'}
               </Text>
 
               <View style={styles.dialSteppersRow}>
@@ -335,7 +465,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
             {/* Cumulative Input */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: theme.ink, fontSize: 13.5 * fontScale }]}>
-                Kabuuang Reading sa Metro (Cumulative kWh)
+                {isEnglish ? 'Cumulative Meter Reading (Total kWh)' : 'Kabuuang Reading sa Metro (Cumulative kWh)'}
               </Text>
               <View style={styles.inputContainerRow}>
                 <TextInput
@@ -375,7 +505,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
               <View style={styles.previewRow}>
                 <View style={styles.previewCol}>
                   <Text style={[styles.previewLabel, { color: theme.muted, fontSize: 11.5 * fontScale }]}>
-                    Nakaraang Reading
+                    {isEnglish ? 'Previous Reading' : 'Nakaraang Reading'}
                   </Text>
                   <Text style={[styles.previewVal, { color: theme.ink, fontSize: 15 * fontScale }]}>
                     {previousReadingKwh.toLocaleString()} kWh
@@ -384,7 +514,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
 
                 <View style={styles.previewCol}>
                   <Text style={[styles.previewLabel, { color: theme.muted, fontSize: 11.5 * fontScale }]}>
-                    Konsumo Ngayong Linggo
+                    {isEnglish ? 'This Week Usage' : 'Konsumo Ngayong Linggo'}
                   </Text>
                   <Text
                     style={[
@@ -402,7 +532,7 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
 
                 <View style={styles.previewCol}>
                   <Text style={[styles.previewLabel, { color: theme.muted, fontSize: 11.5 * fontScale }]}>
-                    Tinatayang Halaga
+                    {isEnglish ? 'Estimated Cost' : 'Tinatayang Halaga'}
                   </Text>
                   <Text style={[styles.previewVal, { color: theme.ok, fontSize: 15 * fontScale, fontWeight: '800' }]}>
                     ₱{deltaCalc.costEstimate.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -420,10 +550,12 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                 ]}
               >
                 <Text style={[styles.alertTitle, { color: theme.danger, fontSize: 13 * fontScale }]}>
-                  Mas Mababa ang Reading!
+                  {isEnglish ? 'Lower Reading Warning!' : 'Mas Mababa ang Reading!'}
                 </Text>
                 <Text style={[styles.alertBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                  Ang kasalukuyang reading ({currentReadingNumber} kWh) ay mas mababa kaysa nakaraan ({previousReadingKwh} kWh). Pakitiyak ang mga dial sa litrato.
+                  {isEnglish
+                    ? `Current reading (${currentReadingNumber} kWh) is lower than previous (${previousReadingKwh} kWh). Please recheck the photo dials.`
+                    : `Ang kasalukuyang reading (${currentReadingNumber} kWh) ay mas mababa kaysa nakaraan (${previousReadingKwh} kWh). Pakitiyak ang mga dial sa litrato.`}
                 </Text>
               </View>
             )}
@@ -436,10 +568,12 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                 ]}
               >
                 <Text style={[styles.alertTitle, { color: theme.warn, fontSize: 13 * fontScale }]}>
-                  Spike Alert sa Konsumo!
+                  {isEnglish ? 'Consumption Spike Alert!' : 'Spike Alert sa Konsumo!'}
                 </Text>
                 <Text style={[styles.alertBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                  Lampas sa 150 kWh ang konsumo para sa isang linggo ({deltaCalc.weeklyUsageKwh} kWh). Siguraduhing tama ang pagbasa sa 10,000s at 1,000s dials.
+                  {isEnglish
+                    ? `Weekly usage exceeds 150 kWh (${deltaCalc.weeklyUsageKwh} kWh). Ensure proper reading of 10,000s and 1,000s dials.`
+                    : `Lampas sa 150 kWh ang konsumo para sa isang linggo (${deltaCalc.weeklyUsageKwh} kWh). Siguraduhing tama ang pagbasa sa 10,000s at 1,000s dials.`}
                 </Text>
               </View>
             )}
@@ -452,10 +586,12 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
                 ]}
               >
                 <Text style={[styles.alertTitle, { color: theme.ok, fontSize: 13 * fontScale }]}>
-                  5-Dial Rollover Na-detect
+                  {isEnglish ? '5-Dial Rollover Detected' : '5-Dial Rollover Na-detect'}
                 </Text>
                 <Text style={[styles.alertBody, { color: theme.ink, fontSize: 12 * fontScale }]}>
-                  Lumampas na sa 99,999 pabalik sa 00,000 ang metro. Ang kalkuladong lingguhang konsumo ay {deltaCalc.weeklyUsageKwh} kWh.
+                  {isEnglish
+                    ? `Meter exceeded 99,999 back to 00,000. Calculated weekly usage is ${deltaCalc.weeklyUsageKwh} kWh.`
+                    : `Lumampas na sa 99,999 pabalik sa 00,000 ang metro. Ang kalkuladong lingguhang konsumo ay ${deltaCalc.weeklyUsageKwh} kWh.`}
                 </Text>
               </View>
             )}
@@ -467,10 +603,10 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
               style={[styles.retakeBtn, { borderColor: theme.line, backgroundColor: theme.bg }]}
               onPress={onRetake}
               accessibilityRole="button"
-              accessibilityLabel="Kumuha muli ng litrato"
+              accessibilityLabel={isEnglish ? 'Retake photo' : 'Kumuha muli ng litrato'}
             >
               <Text style={[styles.retakeBtnText, { color: theme.ink, fontSize: 14 * fontScale }]}>
-                Kumuha Muli
+                {isEnglish ? 'Retake' : 'Kumuha Muli'}
               </Text>
             </TouchableOpacity>
 
@@ -478,15 +614,122 @@ export const AnalogMeterVerificationDrawer: React.FC<AnalogMeterVerificationDraw
               style={[styles.confirmBtn, { backgroundColor: theme.brand }]}
               onPress={handleSave}
               accessibilityRole="button"
-              accessibilityLabel="Kumpirmahin at I-save ang reading"
+              accessibilityLabel={isEnglish ? 'Confirm and save reading' : 'Kumpirmahin at I-save ang reading'}
             >
               <Text style={[styles.confirmBtnText, { color: theme.brandInk, fontSize: 14.5 * fontScale }]}>
-                Kumpirmahin at I-save
+                {isEnglish ? 'Confirm & Save' : 'Kumpirmahin at I-save'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Internal Electromechanical Reading Instructions Popup Modal */}
+      <Modal
+        visible={guideModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setGuideModalVisible(false)}
+      >
+        <View style={styles.guideModalBackdrop}>
+          <View style={[styles.guideModalSheet, { backgroundColor: theme.surface, borderColor: '#FF6B0040' }]}>
+            {/* Guide Header */}
+            <View style={[styles.guideModalHeader, { borderBottomColor: theme.line }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.guideModalSuper, { color: '#FF6B00', fontSize: 11 * fontScale }]}>
+                  {isEnglish ? 'REFERENCE GUIDE' : 'GABAY SA PAGBASA'}
+                </Text>
+                <Text style={[styles.guideModalTitle, { color: theme.ink, fontSize: 17 * fontScale }]}>
+                  {isEnglish ? 'How to Read Dial Meters' : 'Paano Basahin ang Dial Meter'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setGuideModalVisible(false)}
+                style={[styles.closeMiniBtn, { backgroundColor: theme.cont }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close guide"
+              >
+                <Text style={[styles.closeMiniText, { color: theme.muted }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Scrollable Step-by-Step Instructions */}
+            <ScrollView style={styles.guideModalScroll} showsVerticalScrollIndicator={false}>
+              {/* Step 1: Dials Identification */}
+              <View style={[styles.guideCard, { backgroundColor: theme.cont, borderColor: theme.line }]}>
+                <View style={styles.guideStepHeaderRow}>
+                  <Text style={[styles.guideStepNum, { backgroundColor: '#FF6B00', color: '#FFF' }]}>1</Text>
+                  <Text style={[styles.guideCardHeading, { color: theme.ink, fontSize: 14 * fontScale }]}>
+                    {isEnglish ? 'Identify the 4 or 5 Dials' : 'Tingnan ang 4 o 5 Dials'}
+                  </Text>
+                </View>
+                <ElectromechanicalMeterGraphic size={170} />
+                <Text style={[styles.guideCardBodyText, { color: theme.muted, fontSize: 12 * fontScale }]}>
+                  {isEnglish
+                    ? 'Electromechanical meters have four (or five) dials that record electricity consumption. Read them from left to right.'
+                    : 'Ang mga electromechanical meter ay may apat o limang dial. Basahin ang mga ito mula kaliwa pakanan.'}
+                </Text>
+              </View>
+
+              {/* Step 2: Opposite Directions */}
+              <View style={[styles.guideCard, { backgroundColor: theme.cont, borderColor: theme.line }]}>
+                <View style={styles.guideStepHeaderRow}>
+                  <Text style={[styles.guideStepNum, { backgroundColor: '#FF6B00', color: '#FFF' }]}>2</Text>
+                  <Text style={[styles.guideCardHeading, { color: theme.ink, fontSize: 14 * fontScale }]}>
+                    {isEnglish ? 'Opposite Dial Directions' : 'Salungat na Direksyon ng Dial'}
+                  </Text>
+                </View>
+                <View style={[styles.guideDirectionRow, { backgroundColor: theme.surface }]}>
+                  <View style={styles.guideDirectionCol}>
+                    <Text style={[styles.directionTitle, { color: '#FF3B1D' }]}>Dial A & C</Text>
+                    <Text style={[styles.directionSub, { color: theme.ink }]}>↺ Counter-Clockwise</Text>
+                  </View>
+                  <View style={[styles.directionDivider, { backgroundColor: theme.line }]} />
+                  <View style={styles.guideDirectionCol}>
+                    <Text style={[styles.directionTitle, { color: '#FF3B1D' }]}>Dial B & D</Text>
+                    <Text style={[styles.directionSub, { color: theme.ink }]}>↻ Clockwise</Text>
+                  </View>
+                </View>
+                <Text style={[styles.guideCardBodyText, { color: theme.muted, fontSize: 12 * fontScale }]}>
+                  {isEnglish
+                    ? 'Each adjacent dial turns in the opposite direction. Notice the number arrangement on each clock dial.'
+                    : 'Ang magkatabing dial ay umiikot sa magkaibang direksyon. Pansinin ang ayos ng mga numero sa bawat dial.'}
+                </Text>
+              </View>
+
+              {/* Step 3: Smaller Number Rule */}
+              <View style={[styles.guideCard, { backgroundColor: theme.cont, borderColor: '#FF6B0050' }]}>
+                <View style={styles.guideStepHeaderRow}>
+                  <Text style={[styles.guideStepNum, { backgroundColor: '#FF3B1D', color: '#FFF' }]}>3</Text>
+                  <Text style={[styles.guideCardHeading, { color: theme.ink, fontSize: 14 * fontScale }]}>
+                    {isEnglish ? 'Rule: Record the Smaller Number' : 'Patakaran: Itala ang Mas Maliit na Numero'}
+                  </Text>
+                </View>
+                <DialExplanationGraphic chosenNumber={4} />
+                <Text style={[styles.guideCardBodyText, { color: theme.ink, fontSize: 12.5 * fontScale, fontWeight: '600' }]}>
+                  {isEnglish
+                    ? 'To get your Current Reading, record the smaller number each pointer just passed.'
+                    : 'Kung ang karayom ay nasa pagitan ng dalawang numero, laging itala ang mas maliit na numero na dinaanan nito.'}
+                </Text>
+              </View>
+
+              <View style={{ height: 16 }} />
+            </ScrollView>
+
+            {/* Close Button */}
+            <TouchableOpacity
+              onPress={() => setGuideModalVisible(false)}
+              style={[styles.guideModalCloseBtn, { backgroundColor: '#FF6B00' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Got it, close instructions"
+            >
+              <Text style={[styles.guideModalCloseBtnText, { color: '#FFFFFF', fontSize: 14.5 * fontScale }]}>
+                {isEnglish ? 'Got It, Return to Dials' : 'Naintindihan Ko, Bumalik sa mga Dial'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -577,6 +820,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
+    fontWeight: '800',
+  },
+  sectionTitleWithGuideRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  guideCrossCheckBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  guideCrossCheckText: {
     fontWeight: '800',
   },
   sectionHint: {
@@ -734,6 +992,104 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   confirmBtnText: {
+    fontWeight: '800',
+  },
+
+  // Guide Popup Modal Styles
+  guideModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+  guideModalSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopWidth: 1.5,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 28,
+    maxHeight: '88%',
+  },
+  guideModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+  },
+  guideModalSuper: {
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  guideModalTitle: {
+    fontWeight: '800',
+    fontFamily: 'Coolvetica',
+  },
+  guideModalScroll: {
+    maxHeight: 460,
+  },
+  guideCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  guideStepHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  guideStepNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    textAlign: 'center',
+    lineHeight: 22,
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  guideCardHeading: {
+    fontWeight: '800',
+    fontFamily: 'Coolvetica',
+  },
+  guideCardBodyText: {
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  guideDirectionRow: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 10,
+    marginVertical: 6,
+  },
+  guideDirectionCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  directionTitle: {
+    fontWeight: '800',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  directionSub: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  directionDivider: {
+    width: 1,
+    height: '100%',
+  },
+  guideModalCloseBtn: {
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  guideModalCloseBtnText: {
     fontWeight: '800',
   },
 });

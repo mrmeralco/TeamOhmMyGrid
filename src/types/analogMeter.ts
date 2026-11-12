@@ -19,9 +19,13 @@ export interface AnalogMeterLogEntry {
 
 export interface AnalogMeterReadingResult {
   meterType: AnalogMeterType;
+  detectedMeterCategory?: 'electronic' | 'electromechanical' | 'unknown';
   readingKwh: number;
   dials: number[];
+  dialCount?: 4 | 5;
   confidence: number;
+  isMeterDetected?: boolean;
+  failureReason?: 'not_a_meter' | 'blurry' | 'unreadable' | 'low_confidence';
   meterSerialNumber?: string;
   rawExtractionSource: 'gemini_vision' | 'deterministic_simulation';
 }
