@@ -423,7 +423,6 @@ export default function TanongScreen() {
   const [latestVoiceIndex, setLatestVoiceIndex] = useState<number | null>(null);
 
   const capturedAudioRef = useRef<string | null>(null);
-  const handlePressOutRef = useRef<() => void>(() => {});
 
   const handleBubbleLayout = useCallback((layout: { width: number; height: number; y: number }) => {
     if (layout.width > 0 && layout.height > 0) {
@@ -436,8 +435,9 @@ export default function TanongScreen() {
   const scrollViewHeightRef = useRef<number>(520);
   const contentHeightRef = useRef<number>(110);
 
-  const { isRecording, secondsLeft, getLatestTranscript, startRecording, stopRecording } =
+  const { isRecording, getLatestTranscript, startRecording, stopRecording } =
     usePushToTalk();
+  // secondsLeft removed — hook no longer has an auto-countdown timer (true PTT: hold = record, release = stop)
 
   // ── Calculate dynamic distance from mic button to where the chat message lands ──
   const calculateTargetDistance = useCallback(() => {
@@ -466,7 +466,9 @@ export default function TanongScreen() {
   }, [chatHistory]);
 
   // ── Push-To-Talk: Held (Press In) ──
-  const handlePressIn = useCallback(() => {
+  // True PTT: just start recording; do NOT auto-stop.
+  // The user holds the button; release (onPressOut) triggers stopRecording + sends to Gemini.
+  const handlePressIn = useCallback(async () => {
     if (loading) return;
 
     unlockSpeechSynthesis();
@@ -475,27 +477,17 @@ export default function TanongScreen() {
     } catch {}
 
     setMicPhase('recording');
-
-    // Start audio recorder and live bilingual (Filipino + English) speech recognition
     capturedAudioRef.current = null;
-    startRecording(
-      (base64Audio, finalTranscript) => {
-        if (base64Audio) {
-          capturedAudioRef.current = base64Audio;
-        }
-        if (finalTranscript) {
-          setInputQuery(finalTranscript);
-        }
-        // When recording duration auto-expires, trigger seamless finish if still recording
-        handlePressOutRef.current?.();
-      },
-      (liveTranscript) => {
-        setInputQuery(liveTranscript);
-      }
-    );
+
+    // startRecording now just starts; no callback, no auto-stop.
+    // Live transcript updates the input box so the user sees what they're saying.
+    await startRecording((liveTranscript) => {
+      setInputQuery(liveTranscript);
+    });
   }, [loading, startRecording]);
 
   // ── Push-To-Talk: Released (Press Out) ──
+  // True PTT: user releases button → stopRecording() returns captured audio + final transcript.
   const handlePressOut = useCallback(async () => {
     if (micPhase !== 'recording') return;
 
@@ -503,16 +495,18 @@ export default function TanongScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
 
-    const recognizedText = getLatestTranscript().trim() || inputQuery.trim();
-    const capturedAudioBase64 = capturedAudioRef.current || (await stopRecording());
+    // stopRecording stops the recorder + speech recognition and returns the data
+    const { base64: capturedAudioBase64, transcript: recognizedText } = await stopRecording();
     capturedAudioRef.current = null;
 
-    if (!capturedAudioBase64 && !recognizedText) {
+    const displayMessage = recognizedText.trim() || inputQuery.trim() || 'Voice message';
+
+    if (!capturedAudioBase64 && !displayMessage) {
       setMicPhase('idle');
+      setInputQuery('');
       return;
     }
 
-    const displayMessage = recognizedText || 'Voice message';
     setPourSpeechText(displayMessage);
 
     // Calculate exact travel distance based on current chat occupancy
@@ -589,7 +583,6 @@ export default function TanongScreen() {
   }, [
     micPhase,
     inputQuery,
-    getLatestTranscript,
     calculateTargetDistance,
     stopRecording,
     addChatMessage,
@@ -598,11 +591,8 @@ export default function TanongScreen() {
     budget,
     projected,
     activeCanProfile,
+    language,
   ]);
-
-  useEffect(() => {
-    handlePressOutRef.current = handlePressOut;
-  }, [handlePressOut]);
 
   const handlePourDone = useCallback(() => {
     setPourActive(false);
@@ -715,8 +705,8 @@ export default function TanongScreen() {
   }, [handleNavMicTrigger, registerVoiceTrigger]);
 
   useEffect(() => {
-    setVoiceRecordingState(isRecording, secondsLeft);
-  }, [isRecording, secondsLeft, setVoiceRecordingState]);
+    setVoiceRecordingState(isRecording, 0);
+  }, [isRecording, setVoiceRecordingState]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
@@ -1049,7 +1039,7 @@ export default function TanongScreen() {
               phase={micPhase}
               onPressIn={handlePressIn}
               onPressOut={handlePressOut}
-              secondsLeft={secondsLeft}
+              secondsLeft={0}
               theme={theme}
               fontScale={fontScale}
             />
