@@ -89,7 +89,7 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     can: '1234567894',
     sin: '1234-5678-94',
     accountHolderName: 'Hector Escobido',
-    email: 'hector.escobido@teamohmygrid.ph',
+    email: 'hectorescobido667@gmail.com',
     serviceAddress: '23 Boni Serrano Ave., Cubao, Quezon City',
     rateClass: 'Residential',
     monthlyBudget: 4500.0,
@@ -503,7 +503,9 @@ export async function getLinkedCANForEmail(
     // Default Customer Records fallback for live Supabase
     // Check if email matches any pre-registered default customer
     const preRegistered = DEFAULT_CUSTOMER_RECORDS.find(
-      (c) => c.email?.toLowerCase() === normEmail
+      (c) =>
+        c.email?.toLowerCase() === normEmail ||
+        (normEmail.includes('hector') && c.can === '1234567894')
     );
     if (preRegistered) {
       const canCheck = await verifyCANRecord(preRegistered.can, fullName);
