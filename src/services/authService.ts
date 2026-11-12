@@ -34,6 +34,7 @@ const STORAGE_KEYS = {
   AUDIT_LOG: '@kuryentipid_audit_log',
   OTP_STORE: '@kuryentipid_otp_store',
   PENDING_EMAIL: '@kuryentipid_pending_email_verification',
+  PENDING_BUDGET_SETUP: '@kuryentipid_pending_budget_setup_',
 };
 
 // Seed utility customer database (mirrors Meralco database in supabase/seed.sql)
@@ -152,16 +153,32 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
   },
 ];
 
-// Simple, reproducible deterministic password hash simulation for offline/local storage
+// Key-stretched deterministic password hash for offline/local storage
 function secureHash(password: string, salt: string): string {
-  let hash = 0;
-  const combined = password + ':' + salt + ':kuryentipid_salt_2026';
-  for (let i = 0; i < combined.length; i++) {
-    const char = combined.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
+  const input = `${password}:${salt}:kuryentipid_salt_2026`;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  let h3 = 0x85ebca6b;
+  let h4 = 0xc2b2ae35;
+
+  for (let round = 0; round < 10000; round++) {
+    const str = round === 0 ? input : `${h1}:${h2}:${h3}:${h4}:${round}`;
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 ^ (c + round), 0x85ebca6b) >>> 0;
+      h3 = Math.imul(h3 ^ (h1 >>> 13), 0xc2b2ae35) >>> 0;
+      h4 = Math.imul(h4 ^ (h2 >>> 15), 0x27d4eb2f) >>> 0;
+    }
   }
-  return 'phash_' + Math.abs(hash).toString(16) + '_' + combined.length;
+
+  return (
+    'phash2_' +
+    h1.toString(16).padStart(8, '0') +
+    h2.toString(16).padStart(8, '0') +
+    h3.toString(16).padStart(8, '0') +
+    h4.toString(16).padStart(8, '0')
+  );
 }
 
 // ==============================================================================
@@ -228,20 +245,18 @@ export function createDemoUserProfile(customer: CustomerRecord): UserProfile {
   };
 }
 
+const DEMO_ACCOUNT_CAN = '1234567890';
+
 export function findDemoCustomer(identifier: string): CustomerRecord | undefined {
   const norm = identifier.trim().toLowerCase();
   const digits = cleanCAN(identifier);
+  const demoRecord = DEFAULT_CUSTOMER_RECORDS.find((c) => c.can === DEMO_ACCOUNT_CAN);
+  if (!demoRecord) return undefined;
 
-  return DEFAULT_CUSTOMER_RECORDS.find((c) => {
-    if (digits.length === 10 && cleanCAN(c.can) === digits) return true;
-    if (c.email && c.email.toLowerCase() === norm) return true;
-    const emailPrefix = c.email?.split('@')[0].toLowerCase();
-    if (emailPrefix && emailPrefix === norm) return true;
-    if (c.can === '1234567890' && norm === 'nenav') return true;
-    const cleanHolderName = c.accountHolderName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (cleanHolderName && cleanHolderName === norm.replace(/[^a-z0-9]/g, '')) return true;
-    return false;
-  });
+  if (digits.length === 10 && cleanCAN(demoRecord.can) === digits) return demoRecord;
+  if (demoRecord.email && demoRecord.email.toLowerCase() === norm) return demoRecord;
+  if (norm === 'nenav') return demoRecord;
+  return undefined;
 }
 
 const DEFAULT_STORED_USERS: Array<{ user: UserProfile; passwordHash: string; salt: string }> = [
@@ -263,25 +278,6 @@ const DEFAULT_STORED_USERS: Array<{ user: UserProfile; passwordHash: string; sal
     },
     passwordHash: secureHash('P@ssword123', 'demo_salt_nena'),
     salt: 'demo_salt_nena',
-  },
-  {
-    user: {
-      id: 'demo-user-maria',
-      fullName: 'Maria Santos',
-      username: 'mariasantos',
-      email: 'maria.santos@gmail.com',
-      can: '1029384756',
-      sin: '1029-3847-56',
-      householdMembers: 5,
-      majorAppliances: ['Inverter Split AC x 3', 'Double Door Refrigerator', 'Washing Machine'],
-      monthlyBudget: 5000,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      isEmailVerified: true,
-      meterType: 'AMI',
-      meterSerialNumber: 'MR-AMI-4756',
-    },
-    passwordHash: secureHash('P@ssword123', 'demo_salt_maria'),
-    salt: 'demo_salt_maria',
   },
 ];
 
@@ -324,8 +320,17 @@ interface AttemptEntry {
   timestamp: number;
 }
 
+function normalizeRateLimitKey(rawIdentifier: string): string {
+  const trimmed = rawIdentifier.trim();
+  const type = detectIdentifierType(trimmed);
+  if (type === 'can') {
+    return `can:${cleanCAN(trimmed)}`;
+  }
+  return trimmed.toLowerCase();
+}
+
 export async function checkRateLimit(rawIdentifier: string): Promise<RateLimitStatus> {
-  const identifier = rawIdentifier.trim().toLowerCase();
+  const identifier = normalizeRateLimitKey(rawIdentifier);
   const now = Date.now();
   const windowMs = 15 * 60 * 1000; // 15 minutes
   const maxAttempts = 5;
@@ -367,7 +372,7 @@ export async function checkRateLimit(rawIdentifier: string): Promise<RateLimitSt
 }
 
 export async function recordFailedAttempt(rawIdentifier: string): Promise<void> {
-  const identifier = rawIdentifier.trim().toLowerCase();
+  const identifier = normalizeRateLimitKey(rawIdentifier);
   const now = Date.now();
   const windowMs = 15 * 60 * 1000;
 
@@ -387,7 +392,7 @@ export async function recordFailedAttempt(rawIdentifier: string): Promise<void> 
 }
 
 export async function clearRateLimit(rawIdentifier: string): Promise<void> {
-  const identifier = rawIdentifier.trim().toLowerCase();
+  const identifier = normalizeRateLimitKey(rawIdentifier);
   try {
     const json = await AsyncStorage.getItem(STORAGE_KEYS.RATE_LIMITS);
     if (!json) return;
@@ -681,6 +686,12 @@ export async function getLinkedCANForEmail(
 // ==============================================================================
 export async function checkUsernameUnique(username: string): Promise<boolean> {
   const norm = username.trim().toLowerCase();
+  if (!norm) return false;
+
+  const users = await getStoredUsers();
+  if (users.some((u) => u.user.username.toLowerCase() === norm)) {
+    return false;
+  }
 
   if (isLiveSupabaseConfigured() && supabase) {
     try {
@@ -690,19 +701,20 @@ export async function checkUsernameUnique(username: string): Promise<boolean> {
       if (!error && typeof data === 'boolean') {
         return data;
       }
-      const { data: row } = await supabase
+      const { data: row, error: queryError } = await supabase
         .from('profiles')
         .select('id')
         .ilike('username', norm)
         .maybeSingle();
-      return !row;
+      if (!queryError) {
+        return !row;
+      }
     } catch {
-      // fallback
+      // fallback to local check result above
     }
   }
 
-  const users = await getStoredUsers();
-  return !users.some((u) => u.user.username.toLowerCase() === norm);
+  return true;
 }
 
 export async function checkEmailUnique(email: string): Promise<boolean> {
@@ -883,8 +895,56 @@ export async function confirmRegistrationOTP(email: string, token: string): Prom
     isEmailVerified: true,
   };
   await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(profile));
+  await AsyncStorage.setItem(`${STORAGE_KEYS.PENDING_BUDGET_SETUP}${profile.id}`, 'true');
   await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_EMAIL);
   return profile;
+}
+
+export async function hasPendingBudgetSetup(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const val = await AsyncStorage.getItem(`${STORAGE_KEYS.PENDING_BUDGET_SETUP}${userId}`);
+    return val === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function clearPendingBudgetSetup(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    await AsyncStorage.removeItem(`${STORAGE_KEYS.PENDING_BUDGET_SETUP}${userId}`);
+  } catch {
+    // non-blocking
+  }
+}
+
+export async function updateUserMonthlyBudget(userId: string, monthlyBudget: number): Promise<void> {
+  if (!userId || !Number.isFinite(monthlyBudget) || monthlyBudget <= 0) return;
+
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id === userId) {
+        parsed.monthlyBudget = monthlyBudget;
+        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(parsed));
+      }
+    }
+  } catch {
+    // non-blocking
+  }
+
+  if (isLiveSupabaseConfigured() && supabase) {
+    try {
+      await supabase
+        .from('profiles')
+        .update({ monthly_budget: monthlyBudget })
+        .eq('id', userId);
+    } catch {
+      // non-blocking
+    }
+  }
 }
 
 // ==============================================================================
@@ -922,7 +982,9 @@ export async function loginUser(
   const cleanDigits = cleanCAN(identifier);
   const lowerIdent = identifier.toLowerCase();
 
-  // Check if credentials match a pre-seeded Demo Meralco Customer
+  const isDevMode = typeof __DEV__ !== 'undefined' && __DEV__;
+
+  // Check if credentials match the single pre-seeded Demo Meralco Customer (dev/offline only)
   const isDemoPass = password === 'P@ssword123';
   const demoCustomer = isDemoPass ? findDemoCustomer(identifier) : undefined;
 
@@ -981,8 +1043,9 @@ export async function loginUser(
         }
       }
 
-      // If live Supabase authentication did not succeed, allow pre-seeded Demo accounts to log in
-      if (demoCustomer) {
+      // Only allow the single demo account fallback in development builds
+      if (isDevMode && demoCustomer) {
+        await supabase.auth.signOut().catch(() => {});
         const demoProfile = createDemoUserProfile(demoCustomer);
         await clearRateLimit(identifier);
         await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(demoProfile));
@@ -994,13 +1057,15 @@ export async function loginUser(
         success: false,
         error: 'Invalid credentials. Please check your identifier and password.',
       };
-    } catch (e) {
-      if (demoCustomer) {
+    } catch {
+      if (isDevMode && demoCustomer) {
+        await supabase.auth.signOut().catch(() => {});
         const demoProfile = createDemoUserProfile(demoCustomer);
         await clearRateLimit(identifier);
         await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(demoProfile));
         return { success: true, data: demoProfile };
       }
+      await recordFailedAttempt(identifier);
       return { success: false, error: 'Unable to log in. Please try again.' };
     }
   }
@@ -1049,7 +1114,11 @@ export async function loginUser(
   }
 
   if (!userEntry.user.isEmailVerified) {
-    return { success: false, error: 'Please verify your email before logging in.' };
+    await recordFailedAttempt(identifier);
+    return {
+      success: false,
+      error: 'Invalid credentials. Please check your identifier and password.',
+    };
   }
 
   // Login Successful: Reset rate limit, save session, write audit log
@@ -1069,8 +1138,12 @@ export async function getActiveSession(): Promise<UserProfile | null> {
     const profile = json ? JSON.parse(json) : null;
     if (!profile?.isEmailVerified) return null;
     if (isLiveSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.auth.getUser();
-      if (error || data.user?.id !== profile.id || !data.user?.email_confirmed_at) return null;
+      const isDevDemoSession =
+        typeof __DEV__ !== 'undefined' && __DEV__ && profile.id === `demo-user-${DEMO_ACCOUNT_CAN}`;
+      if (!isDevDemoSession) {
+        const { data, error } = await supabase.auth.getUser();
+        if (error || data.user?.id !== profile.id || !data.user?.email_confirmed_at) return null;
+      }
     }
     return profile;
   } catch {

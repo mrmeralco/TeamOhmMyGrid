@@ -12,7 +12,7 @@ import { StartupSplashScreen } from '../components/StartupSplashScreen';
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, needsBudgetSetup } = useAuth();
   const [splashFinished, setSplashFinished] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
     Coolvetica: require('../../assets/fonts/Coolvetica.otf'),
@@ -25,19 +25,23 @@ function AppNavigator() {
     registerDailyPeakAlerts();
   }, []);
 
+  const currentRoute = segments[0] as string | undefined;
+  const inAuthGroup = currentRoute === 'login' || currentRoute === 'register';
+  const inBudgetSetup = currentRoute === 'budget-setup';
+
   useEffect(() => {
     if (isLoading) return;
-    const currentRoute = segments[0] as string | undefined;
-    const inAuthGroup = currentRoute === 'login' || currentRoute === 'register';
 
     if (!user && !inAuthGroup) {
       router.replace('/login');
-    } else if (user && inAuthGroup) {
+    } else if (user && needsBudgetSetup && !inBudgetSetup) {
+      router.replace('/budget-setup');
+    } else if (user && !needsBudgetSetup && (inAuthGroup || inBudgetSetup)) {
       router.replace('/(tabs)');
     }
-  }, [user, isLoading, segments]);
+  }, [user, isLoading, needsBudgetSetup, inAuthGroup, inBudgetSetup]);
 
-  if (isLoading || (!fontsLoaded && !fontError)) {
+  if (isLoading || (!fontsLoaded && !fontError) || (!user && !inAuthGroup)) {
     return (
       <View
         style={{
@@ -65,6 +69,7 @@ function AppNavigator() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
+        <Stack.Screen name="budget-setup" options={{ headerShown: false }} />
         <Stack.Screen
           name="whatif"
           options={{

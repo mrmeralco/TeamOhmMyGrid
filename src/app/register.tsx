@@ -7,7 +7,7 @@ import { SeedAccountsModal } from '../components/SeedAccountsModal';
 import { PageTransitionView } from '../components/PageTransitionView';
 import { isLiveSupabaseConfigured } from '../config/supabase';
 import { useAuth } from '../context/AuthContext';
-import { confirmRegistrationOTP, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
+import { checkUsernameUnique, confirmRegistrationOTP, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
 import { CustomerRecord, RegistrationFormData, UserProfile } from '../types/auth';
 import { evaluatePassword, formatCANDisplay, validateConfirmPassword, validateEmail, validateFullName, validatePassword, validateUsername } from '../utils/validation';
 
@@ -60,6 +60,31 @@ export default function RegisterScreen() {
     return () => clearInterval(timer);
   }, [verificationOpen]);
 
+  useEffect(() => {
+    const candidate = form.username.trim().toLowerCase();
+    if (!validateUsername(candidate).isValid) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      checkUsernameUnique(candidate)
+        .then(available => {
+          if (cancelled) return;
+          if (!available) {
+            setErrors(prev => ({
+              ...prev,
+              username: 'Username is already taken. Please choose another.',
+            }));
+          }
+        })
+        .catch(() => {});
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [form.username]);
+
   const change = (key: keyof RegistrationFormData, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setErrors(prev => ({ ...prev, [key]: '' }));
@@ -97,8 +122,22 @@ export default function RegisterScreen() {
     setBusy(true);
     setError('');
     try {
+      const usernameAvailable = await checkUsernameUnique(form.username);
+      if (!usernameAvailable) {
+        const msg = 'Username is already taken. Please choose another.';
+        setErrors(prev => ({ ...prev, username: msg }));
+        setError(msg);
+        return;
+      }
       const result = await register(form);
-      if (!result.success || !result.data) { setError(result.error || 'Unable to create your account.'); return; }
+      if (!result.success || !result.data) {
+        const msg = result.error || 'Unable to create your account.';
+        if (msg.toLowerCase().includes('username')) {
+          setErrors(prev => ({ ...prev, username: msg }));
+        }
+        setError(msg);
+        return;
+      }
       setPendingEmail(result.data.email);
       setRegisteredUser(result.data);
       setCode('');
@@ -116,7 +155,6 @@ export default function RegisterScreen() {
     setBusy(true); setError(''); setNotice('');
     try {
       const profile = await confirmRegistrationOTP(pendingEmail, code);
-      await refreshSession();
       setRegisteredUser(profile);
       setVerificationOpen(false);
       setPendingEmail('');
@@ -186,7 +224,24 @@ export default function RegisterScreen() {
           ) : (
             <View>
               <Field label="Full name" placeholder="Your full name" value={form.fullName} onChangeText={value => change('fullName', value)} error={errors.fullName} autoComplete="name" editable={!busy} />
-              <Field label="Username" placeholder="4–20 letters or numbers" value={form.username} onChangeText={value => change('username', value.trim().toLowerCase())} error={errors.username} autoCapitalize="none" autoCorrect={false} editable={!busy} />
+              <Field
+                label="Username"
+                placeholder="4–20 letters or numbers"
+                value={form.username}
+                onChangeText={value => change('username', value.trim().toLowerCase())}
+                onBlur={async () => {
+                  const val = validateUsername(form.username);
+                  if (!val.isValid) return;
+                  const available = await checkUsernameUnique(form.username);
+                  if (!available) {
+                    setErrors(prev => ({ ...prev, username: 'Username is already taken. Please choose another.' }));
+                  }
+                }}
+                error={errors.username}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+              />
               <Field label="Email address" placeholder="you@example.com" value={form.email} onChangeText={value => change('email', value.trim())} error={errors.email} keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} editable={!busy} />
               <Field label="Password" placeholder="At least 8 characters" value={form.password} onChangeText={value => change('password', value)} error={errors.password} secureTextEntry={!showPassword} autoComplete="new-password" autoCapitalize="none" editable={!busy} />
               <View style={styles.passwordHelp}>
@@ -196,14 +251,16 @@ export default function RegisterScreen() {
               <Field label="Confirm password" placeholder="Re-enter your password" value={form.confirmPassword} onChangeText={value => change('confirmPassword', value)} error={errors.confirmPassword} secureTextEntry={!showPassword} autoComplete="new-password" autoCapitalize="none" editable={!busy} onSubmitEditing={submit} />
               <Text style={styles.helper}>Your Meralco CAN will be automatically linked to your email.</Text>
               
-              {/* Demo Meralco Accounts Quick Picker */}
-              <TouchableOpacity
-                style={styles.demoAccountsBtn}
-                onPress={() => setSeedModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.demoAccountsBtnText}>Demo Meralco Accounts (Quick Fill)</Text>
-              </TouchableOpacity>
+              {/* Demo Meralco Accounts Quick Picker (dev only) */}
+              {__DEV__ && (
+                <TouchableOpacity
+                  style={styles.demoAccountsBtn}
+                  onPress={() => setSeedModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.demoAccountsBtnText}>Demo Meralco Accounts (Quick Fill)</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || !configured) && styles.disabled]} disabled={busy || !configured} onPress={submit} activeOpacity={0.88}>
                 {!(busy || !configured) && (
@@ -221,8 +278,18 @@ export default function RegisterScreen() {
           )}
           <TouchableOpacity accessibilityRole="button" style={styles.footer} disabled={busy} onPress={() => router.replace('/login')}><Text style={styles.secondaryLink}>Log in</Text></TouchableOpacity>
         </View>
-        <EmailDeliveryModal visible={showCAN} user={registeredUser} onProceed={() => { setShowCAN(false); router.replace('/(tabs)'); }} />
-        <SeedAccountsModal visible={seedModalVisible} onClose={() => setSeedModalVisible(false)} onSelectAccount={handleSelectSeedAccount} />
+        <EmailDeliveryModal
+          visible={showCAN}
+          user={registeredUser}
+          onProceed={async () => {
+            setShowCAN(false);
+            await refreshSession();
+            router.replace('/budget-setup');
+          }}
+        />
+        {__DEV__ && (
+          <SeedAccountsModal visible={seedModalVisible} onClose={() => setSeedModalVisible(false)} onSelectAccount={handleSelectSeedAccount} />
+        )}
       </ScrollView>
     </PageTransitionView>
   </KeyboardAvoidingView>
