@@ -19,6 +19,7 @@ import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
 import { parseMeralcoBillImage } from '../../lib/geminiService';
 import { ExtractedBillData } from '../../types';
+import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_BILL_BREAKDOWN, MOCK_USER } from '../../constants/mockData';
 
 export default function BillScreen() {
@@ -30,7 +31,11 @@ export default function BillScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const [pendingBillData, setPendingBillData] = useState<ExtractedBillData | null>(null);
 
-  const loggedInCan = user?.can || activeBill?.customerAccountNumber || activeCanProfile?.accountNumber || MOCK_USER.accountNumber;
+  const loggedInCan =
+    activeCanProfile?.accountNumber ||
+    (user?.can ? formatCANDisplay(user.can) : null) ||
+    activeBill?.customerAccountNumber ||
+    MOCK_USER.accountNumber;
 
   const bill = activeBill || {
     customerAccountNumber: loggedInCan,

@@ -5,6 +5,9 @@ import { mockSmartPlugService } from '../lib/mockSmartPlugService';
 import { smartPlugSimulator, INITIAL_SMART_PLUGS } from '../lib/smartPlugSimulator';
 import { calculateMeralcoBill } from '../lib/tariffEngine';
 import { MOCK_USER, PRESET_CAN_PROFILES } from '../constants/mockData';
+import { useAuth } from './AuthContext';
+import { cleanCAN, formatCANDisplay } from '../utils/validation';
+import { UserProfile } from '../types/auth';
 
 export interface ChatHistoryItem {
   sender: 'user' | 'tipi';
@@ -45,12 +48,48 @@ export interface EnergyContextValue extends EnergyState {
   setVoiceRecordingState: (recording: boolean, secondsLeft?: number) => void;
   switchCanProfile: (id: string) => void;
   renameCanProfile: (id: string, newName: string) => void;
+  addCanProfile: (name: string, accountNumber: string, serviceAddress?: string) => void;
+  deleteCanProfile: (id: string) => void;
 }
 
-const BUDGET_STORAGE_KEY = '@kuryentipid_budget';
-const BILL_STORAGE_KEY = '@kuryentipid_active_bill';
-const CAN_PROFILES_STORAGE_KEY = '@kuryentipid_can_profiles';
-const ACTIVE_CAN_STORAGE_KEY = '@kuryentipid_active_can_id';
+export function createDefaultUserCanProfiles(user: {
+  id?: string;
+  fullName?: string;
+  can?: string;
+  monthlyBudget?: number;
+  serviceAddress?: string;
+}): CANProfile[] {
+  const rawCan = user.can || '1234567890';
+  const formattedCan = formatCANDisplay(rawCan);
+  const budget = user.monthlyBudget && user.monthlyBudget > 0 ? user.monthlyBudget : 3500;
+  const customerName = user.fullName || 'Customer';
+  const serviceAddress = user.serviceAddress || 'Meralco Franchise Area, Metro Manila';
+
+  return [
+    {
+      id: `can-${cleanCAN(rawCan) || user.id || 'primary'}`,
+      name: 'Bahay',
+      accountNumber: formattedCan,
+      customerName,
+      serviceAddress,
+      ratePerKwh: 11.43,
+      budget,
+      currentKwh: 188,
+      billData: {
+        customerAccountNumber: formattedCan,
+        billingPeriod: {
+          startDate: '2026-04-15',
+          endDate: '2026-05-14',
+        },
+        dueDate: '2026-05-25',
+        totalKwh: 188,
+        totalAmountDue: Math.round(budget * 0.75 * 100) / 100,
+        generationCharge: Math.round(budget * 0.44 * 100) / 100,
+        verifiedByUser: true,
+      },
+    },
+  ];
+}
 
 const DEFAULT_BILL: ExtractedBillData = PRESET_CAN_PROFILES[0].billData;
 
@@ -94,13 +133,21 @@ export const EnergyContext = createContext<EnergyContextValue>({
   setVoiceRecordingState: () => {},
   switchCanProfile: () => {},
   renameCanProfile: () => {},
+  addCanProfile: () => {},
+  deleteCanProfile: () => {},
 });
 
 export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [canProfiles, setCanProfiles] = useState<CANProfile[]>(PRESET_CAN_PROFILES);
-  const [activeCanId, setActiveCanId] = useState<string>('can-1');
+  const { user } = useAuth();
 
-  const [budget, setBudgetState] = useState<number>(DEFAULT_STATE.budget);
+  const [canProfiles, setCanProfiles] = useState<CANProfile[]>(() =>
+    user ? createDefaultUserCanProfiles(user) : PRESET_CAN_PROFILES
+  );
+  const [activeCanId, setActiveCanId] = useState<string>(() =>
+    user ? `can-${cleanCAN(user.can) || user.id || 'primary'}` : 'can-1'
+  );
+
+  const [budget, setBudgetState] = useState<number>(user?.monthlyBudget || DEFAULT_STATE.budget);
   const [currentKwh, setCurrentKwh] = useState<number>(DEFAULT_STATE.currentKwh);
   const [projected, setProjected] = useState<number>(DEFAULT_STATE.projected);
   const [activeBill, setActiveBillState] = useState<ExtractedBillData | null>(DEFAULT_STATE.activeBill);
@@ -117,46 +164,110 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const voiceTriggerRef = useRef<(() => void) | null>(null);
 
   const activeCanProfile =
-    canProfiles.find((p) => p.id === activeCanId) || canProfiles[0] || PRESET_CAN_PROFILES[0];
+    canProfiles.find((p) => p.id === activeCanId) ||
+    canProfiles[0] ||
+    (user ? createDefaultUserCanProfiles(user)[0] : PRESET_CAN_PROFILES[0]);
+
+  const getStorageKeys = (userId?: string | null) => {
+    const suffix = userId ? `_${userId}` : '_guest';
+    return {
+      profilesKey: `@kuryentipid_can_profiles${suffix}`,
+      activeCanKey: `@kuryentipid_active_can_id${suffix}`,
+      budgetKey: `@kuryentipid_budget${suffix}`,
+      billKey: `@kuryentipid_active_bill${suffix}`,
+    };
+  };
 
   useEffect(() => {
+    let isMounted = true;
     (async () => {
       try {
-        let loadedProfiles = PRESET_CAN_PROFILES;
-        const savedCanProfiles = await AsyncStorage.getItem(CAN_PROFILES_STORAGE_KEY);
-        if (savedCanProfiles) {
-          try {
-            const parsed = JSON.parse(savedCanProfiles);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              loadedProfiles = parsed;
-              setCanProfiles(parsed);
+        if (user) {
+          const { profilesKey, activeCanKey } = getStorageKeys(user.id);
+          let loadedProfiles: CANProfile[] = [];
+          const savedCanProfiles = await AsyncStorage.getItem(profilesKey);
+          if (savedCanProfiles) {
+            try {
+              const parsed = JSON.parse(savedCanProfiles);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                // Ensure it's not the old Maria Santos mock data leaked into user storage
+                const isOldMock = parsed.every(
+                  (p) =>
+                    p.customerName === 'Maria Santos' ||
+                    p.customerName === 'Santos Sari-Sari Store' ||
+                    p.customerName === 'Maria Santos (Condo)'
+                );
+                if (!isOldMock) {
+                  loadedProfiles = parsed;
+                }
+              }
+            } catch {
+              // fallback
             }
-          } catch {
-            // fallback
           }
+
+          if (loadedProfiles.length === 0) {
+            loadedProfiles = createDefaultUserCanProfiles(user);
+            await AsyncStorage.setItem(profilesKey, JSON.stringify(loadedProfiles));
+          }
+
+          const savedActiveCanId = await AsyncStorage.getItem(activeCanKey);
+          const resolvedCanId =
+            savedActiveCanId && loadedProfiles.some((p) => p.id === savedActiveCanId)
+              ? savedActiveCanId
+              : loadedProfiles[0].id;
+
+          if (!isMounted) return;
+          setCanProfiles(loadedProfiles);
+          setActiveCanId(resolvedCanId);
+
+          const currentProfile =
+            loadedProfiles.find((p) => p.id === resolvedCanId) || loadedProfiles[0];
+
+          setBudgetState(currentProfile.budget);
+          setActiveBillState(currentProfile.billData);
+          setCurrentKwh(currentProfile.currentKwh);
+          const initialBill = calculateMeralcoBill(currentProfile.currentKwh);
+          setProjected(initialBill.totalAmountDue);
+        } else {
+          // Unauthenticated / demo guest
+          const { profilesKey, activeCanKey } = getStorageKeys(null);
+          let loadedProfiles = PRESET_CAN_PROFILES;
+          const savedCanProfiles = await AsyncStorage.getItem(profilesKey);
+          if (savedCanProfiles) {
+            try {
+              const parsed = JSON.parse(savedCanProfiles);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                loadedProfiles = parsed;
+              }
+            } catch {}
+          }
+          const savedActiveCanId = await AsyncStorage.getItem(activeCanKey);
+          const resolvedCanId =
+            savedActiveCanId && loadedProfiles.some((p) => p.id === savedActiveCanId)
+              ? savedActiveCanId
+              : 'can-1';
+
+          if (!isMounted) return;
+          setCanProfiles(loadedProfiles);
+          setActiveCanId(resolvedCanId);
+          const currentProfile =
+            loadedProfiles.find((p) => p.id === resolvedCanId) || loadedProfiles[0];
+          setBudgetState(currentProfile.budget);
+          setActiveBillState(currentProfile.billData);
+          setCurrentKwh(currentProfile.currentKwh);
+          const initialBill = calculateMeralcoBill(currentProfile.currentKwh);
+          setProjected(initialBill.totalAmountDue);
         }
-
-        const savedActiveCanId = await AsyncStorage.getItem(ACTIVE_CAN_STORAGE_KEY);
-        const resolvedCanId =
-          savedActiveCanId && loadedProfiles.some((p) => p.id === savedActiveCanId)
-            ? savedActiveCanId
-            : 'can-1';
-        setActiveCanId(resolvedCanId);
-
-        const currentProfile =
-          loadedProfiles.find((p) => p.id === resolvedCanId) || loadedProfiles[0];
-
-        // Authoritative source of truth is the active CAN profile in loadedProfiles
-        setBudgetState(currentProfile.budget);
-        setActiveBillState(currentProfile.billData);
-        setCurrentKwh(currentProfile.currentKwh);
-        const initialBill = calculateMeralcoBill(currentProfile.currentKwh);
-        setProjected(initialBill.totalAmountDue);
       } catch {
         // ignore load error
       }
     })();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, user?.can, user?.fullName, user?.monthlyBudget]);
 
   // Subscribe to Smart Plug IoT Simulator changes
   useEffect(() => {
@@ -178,10 +289,11 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setBudget = (newBudget: number) => {
     setBudgetState(newBudget);
-    AsyncStorage.setItem(BUDGET_STORAGE_KEY, newBudget.toString()).catch(() => {});
+    const { budgetKey, profilesKey } = getStorageKeys(user?.id);
+    AsyncStorage.setItem(budgetKey, newBudget.toString()).catch(() => {});
     setCanProfiles((prev) => {
       const updated = prev.map((p) => (p.id === activeCanId ? { ...p, budget: newBudget } : p));
-      AsyncStorage.setItem(CAN_PROFILES_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      AsyncStorage.setItem(profilesKey, JSON.stringify(updated)).catch(() => {});
       return updated;
     });
   };
@@ -190,12 +302,13 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setActiveBillState(bill);
     setCurrentKwh(bill.totalKwh);
     recalculateBill(bill.totalKwh);
-    AsyncStorage.setItem(BILL_STORAGE_KEY, JSON.stringify(bill)).catch(() => {});
+    const { billKey, profilesKey } = getStorageKeys(user?.id);
+    AsyncStorage.setItem(billKey, JSON.stringify(bill)).catch(() => {});
     setCanProfiles((prev) => {
       const updated = prev.map((p) =>
         p.id === activeCanId ? { ...p, billData: bill, currentKwh: bill.totalKwh } : p
       );
-      AsyncStorage.setItem(CAN_PROFILES_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      AsyncStorage.setItem(profilesKey, JSON.stringify(updated)).catch(() => {});
       return updated;
     });
   };
@@ -204,13 +317,14 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const target = canProfiles.find((p) => p.id === id);
     if (!target) return;
     setActiveCanId(id);
-    AsyncStorage.setItem(ACTIVE_CAN_STORAGE_KEY, id).catch(() => {});
+    const { activeCanKey, billKey, budgetKey } = getStorageKeys(user?.id);
+    AsyncStorage.setItem(activeCanKey, id).catch(() => {});
 
     setActiveBillState(target.billData);
-    AsyncStorage.setItem(BILL_STORAGE_KEY, JSON.stringify(target.billData)).catch(() => {});
+    AsyncStorage.setItem(billKey, JSON.stringify(target.billData)).catch(() => {});
 
     setBudgetState(target.budget);
-    AsyncStorage.setItem(BUDGET_STORAGE_KEY, target.budget.toString()).catch(() => {});
+    AsyncStorage.setItem(budgetKey, target.budget.toString()).catch(() => {});
 
     setCurrentKwh(target.currentKwh);
     recalculateBill(target.currentKwh);
@@ -218,9 +332,63 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const renameCanProfile = (id: string, newName: string) => {
     if (!newName.trim()) return;
+    const { profilesKey } = getStorageKeys(user?.id);
     setCanProfiles((prev) => {
       const updated = prev.map((p) => (p.id === id ? { ...p, name: newName.trim() } : p));
-      AsyncStorage.setItem(CAN_PROFILES_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      AsyncStorage.setItem(profilesKey, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
+  const addCanProfile = (name: string, accountNumber: string, serviceAddress?: string) => {
+    const clean = cleanCAN(accountNumber);
+    if (!clean || clean.length !== 10) return;
+    const formatted = formatCANDisplay(clean);
+    const newProfile: CANProfile = {
+      id: `can-${clean}-${Date.now()}`,
+      name: name.trim() || `CAN ${formatted}`,
+      accountNumber: formatted,
+      customerName: user?.fullName || 'Customer',
+      serviceAddress: serviceAddress?.trim() || 'Meralco Franchise Area, Metro Manila',
+      ratePerKwh: 11.43,
+      budget: budget || 3500,
+      currentKwh: 150,
+      billData: {
+        customerAccountNumber: formatted,
+        billingPeriod: {
+          startDate: '2026-04-15',
+          endDate: '2026-05-14',
+        },
+        dueDate: '2026-05-25',
+        totalKwh: 150,
+        totalAmountDue: Math.round((budget || 3500) * 0.7 * 100) / 100,
+        generationCharge: Math.round((budget || 3500) * 0.4 * 100) / 100,
+        verifiedByUser: true,
+      },
+    };
+    const { profilesKey } = getStorageKeys(user?.id);
+    setCanProfiles((prev) => {
+      const updated = [...prev, newProfile];
+      AsyncStorage.setItem(profilesKey, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
+  const deleteCanProfile = (id: string) => {
+    if (canProfiles.length <= 1) return;
+    const { profilesKey, activeCanKey } = getStorageKeys(user?.id);
+    setCanProfiles((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      AsyncStorage.setItem(profilesKey, JSON.stringify(updated)).catch(() => {});
+      if (activeCanId === id && updated.length > 0) {
+        const nextActive = updated[0];
+        setActiveCanId(nextActive.id);
+        AsyncStorage.setItem(activeCanKey, nextActive.id).catch(() => {});
+        setBudgetState(nextActive.budget);
+        setActiveBillState(nextActive.billData);
+        setCurrentKwh(nextActive.currentKwh);
+        recalculateBill(nextActive.currentKwh);
+      }
       return updated;
     });
   };
@@ -330,6 +498,8 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setVoiceRecordingState,
         switchCanProfile,
         renameCanProfile,
+        addCanProfile,
+        deleteCanProfile,
       }}
     >
       {children}
