@@ -7,7 +7,7 @@
 
 ---
 
-## 📖 About the Ap
+## 📖 About the App
 
 **The Problem**  
 In July of 2026, numerous complaints surfaced online regarding sudden electricity consumption spikes, with bills reaching triple their usual amounts. Despite statements and explanations from Meralco on the recent bill increases, consumers still struggle to understand their electricity usage and billing mechanics. 
