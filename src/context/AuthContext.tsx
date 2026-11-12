@@ -45,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (identifier: string, pass: string): Promise<AuthResponse<UserProfile>> => {
+    setUser(null);
     const res = await loginUser(identifier, pass);
     if (res.success && res.data?.isEmailVerified) {
       setUser(res.data);

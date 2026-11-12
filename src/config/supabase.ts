@@ -35,3 +35,11 @@ export const supabase: SupabaseClient | null = isLiveSupabaseConfigured()
       },
     })
   : null;
+
+// Password validation must never establish the app's persistent session.
+export function createPasswordCheckClient(): SupabaseClient {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false,
+      storageKey: 'kuryentipid-password-check' },
+  });
+}

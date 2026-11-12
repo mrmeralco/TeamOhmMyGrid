@@ -17,14 +17,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LoginEmailVerification } from '../components/LoginEmailVerification';
+import { getPendingEmailVerification } from '../services/authService';
 import { SocialButtons } from '../components/SocialButtons';
 import { useAuth } from '../context/AuthContext';
 import { detectIdentifierType, validateLoginIdentifier } from '../utils/validation';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, refreshSession } = useAuth();
 
+  const [verificationEmail, setVerificationEmail] = useState('');
+  useEffect(() => {
+    let active = true;
+    getPendingEmailVerification().then(pending => { if (active && pending?.kind === 'login') setVerificationEmail(pending.email); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isFocusedId, setIsFocusedId] = useState(false);
@@ -89,8 +97,9 @@ export default function LoginScreen() {
 
     try {
       const res = await login(identifier, password);
-      if (res.success) {
-        router.replace('/dashboard');
+      if (res.success && res.verificationRequired && res.verificationEmail) {
+        setPassword('');
+        setVerificationEmail(res.verificationEmail);
       } else {
         if (res.rateLimited && res.retryAfterSeconds) {
           setLockoutTimer(res.retryAfterSeconds);
@@ -107,6 +116,11 @@ export default function LoginScreen() {
     }
   };
 
+  if (verificationEmail) return (
+    <ScrollView contentContainerStyle={[styles.pageBackground, { flexGrow: 1 }]} keyboardShouldPersistTaps="handled">
+      <LoginEmailVerification email={verificationEmail} onVerified={async () => { await refreshSession(); router.replace('/dashboard'); }} onCancel={() => { setVerificationEmail(''); setPassword(''); setErrorMsg(null); }} />
+    </ScrollView>
+  );
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}

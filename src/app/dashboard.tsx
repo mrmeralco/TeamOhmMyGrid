@@ -166,6 +166,10 @@ export default function DashboardScreen() {
             {/* Mabilisang aksyon */}
             <Text style={styles.actionSectionTitle}>Mabilisang aksyon</Text>
 
+            <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('./meter-reading')} activeOpacity={0.7}>
+              <Text style={styles.actionBtnText}>Read my meter / Basahin ang metro</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.solidOrangeBtn} activeOpacity={0.8}>
               <Text style={styles.solidOrangeText}>Bakit tumaas ang bill ko?</Text>
             </TouchableOpacity>

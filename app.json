@@ -21,7 +21,12 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      ["expo-image-picker", {
+        "photosPermission": "Allow KuryenTipid to select a meter photo for reading.",
+        "cameraPermission": "Allow KuryenTipid to photograph your electric meter.",
+        "microphonePermission": false
+      }]
     ],
     "experiments": {
       "typedRoutes": true

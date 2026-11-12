@@ -5,7 +5,7 @@
 // ==============================================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isLiveSupabaseConfigured, supabase } from '../config/supabase';
+import { createPasswordCheckClient, isLiveSupabaseConfigured, supabase } from '../config/supabase';
 import {
   AuthResponse,
   CustomerRecord,
@@ -320,7 +320,7 @@ export async function verifyCANRecord(
           : undefined,
       };
     } catch (e) {
-      console.warn('Supabase RPC check_can_eligibility fallback to local database:', e);
+      return { valid: false, message: 'Unable to check your CAN right now. Please try again.' };
     }
   }
 
@@ -405,6 +405,9 @@ export async function registerUser(
   if (!isLiveSupabaseConfigured() || !supabase) {
     return { success: false, error: 'Email signup is currently unavailable. Please try again once email delivery is connected.' };
   }
+  if (await getPendingEmailVerification()) {
+    return { success: false, error: 'Finish or cancel the current email verification before registering again.' };
+  }
   // --- Server-side validation matching all frontend rules ---
   const nameVal = validateFullName(formData.fullName);
   if (!nameVal.isValid) return { success: false, error: nameVal.message };
@@ -486,14 +489,28 @@ export async function registerUser(
     }
   }
 
+  // Automatically selected demo CANs must also pass the live database check.
+  // Local seed availability is not evidence that the cloud account is unclaimed.
+  if (!formData.can) {
+    const eligibility = await verifyCANRecord(cleanDigits, formData.fullName);
+    if (!eligibility.valid) {
+      return { success: false, error: eligibility.message };
+    }
+    customerInfo = eligibility.customer;
+  }
+
   // Execute Live Supabase Registration if configured
   if (isLiveSupabaseConfigured() && supabase) {
     try {
+      const cancellationToken = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(cancellationToken));
+      const cancellationHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
       const { data, error } = await supabase.auth.signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         options: {
           data: {
+            cancellation_hash: cancellationHash,
             full_name: formData.fullName.trim(),
             username: formData.username.trim(),
             can: cleanDigits,
@@ -527,7 +544,7 @@ export async function registerUser(
         return { success: false, error: 'Enable Confirm email in Supabase. Email verification is required.' };
       }
       // Keep only the address and send time so a reload can resume verification.
-      await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ email: profile.email, sentAt: Date.now() }));
+      await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ email: profile.email, sentAt: Date.now(), kind: 'signup', cancellationToken }));
       return { success: true, data: profile };
     } catch {
       return { success: false, error: 'Unable to send verification email. Please try again.' };
@@ -536,26 +553,63 @@ export async function registerUser(
   return { success: false, error: 'Email verification is not configured.' };
 }
 
-export async function getPendingEmailVerification(): Promise<{ email: string; sentAt: number } | null> {
+export const EMAIL_CODE_LIFETIME_MS = 180000;
+export interface PendingEmailVerification {
+  email: string;
+  sentAt: number;
+  kind: 'signup' | 'login';
+  cancellationToken?: string;
+}
+export async function getPendingEmailVerification(): Promise<PendingEmailVerification | null> {
   const raw = await AsyncStorage.getItem(STORAGE_KEYS.PENDING_EMAIL);
   if (!raw) return null;
   try {
     const pending = JSON.parse(raw);
-    return typeof pending.email === 'string' && validateEmail(pending.email).isValid &&
-      typeof pending.sentAt === 'number' && Number.isFinite(pending.sentAt)
-      ? { email: pending.email, sentAt: pending.sentAt } : null;
+    if (typeof pending.email !== 'string' || !validateEmail(pending.email).isValid ||
+        typeof pending.sentAt !== 'number' || !Number.isFinite(pending.sentAt)) return null;
+    return { email: pending.email, sentAt: pending.sentAt, kind: pending.kind === 'login' ? 'login' : 'signup', cancellationToken: pending.cancellationToken };
   } catch { return null; }
+}
+
+// Recovery for a deleted/reset project or a legacy challenge. This only forgets
+// this device's pending flow; it neither deletes an Auth user nor verifies one.
+export async function forgetPendingEmailVerification(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_EMAIL);
+  await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+}
+
+export async function cancelPendingEmailVerification(): Promise<void> {
+  const pending = await getPendingEmailVerification();
+  if (pending?.kind === 'signup') {
+    if (!supabase || !pending.cancellationToken) {
+      throw new Error('This older signup cannot be cancelled automatically. Complete verification or ask the project administrator to remove the unverified account.');
+    }
+    const { data, error } = await supabase.rpc('cancel_pending_signup', {
+      p_email: pending.email, p_token: pending.cancellationToken,
+    });
+    if (error || data !== true) throw new Error('Unable to cancel this signup. It may already be verified. Please log in or try again.');
+  }
+  await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_EMAIL);
+  await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
 }
 
 export async function resendRegistrationOTP(email: string): Promise<void> {
   if (!supabase) throw new Error('Email verification is not configured.');
-  const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
+  const pending = await getPendingEmailVerification();
+  if (!pending || pending.email !== email.trim().toLowerCase()) throw new Error('Start signup or login again to request a code.');
+  if (Date.now() - pending.sentAt < 60000) throw new Error('Please wait 60 seconds before requesting another code.');
+  const { error } = pending.kind === 'login'
+    ? await supabase.auth.signInWithOtp({ email: pending.email, options: { shouldCreateUser: false } })
+    : await supabase.auth.resend({ type: 'signup', email: pending.email });
   if (error) throw error;
-  await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ email: email.trim().toLowerCase(), sentAt: Date.now() }));
+  await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ ...pending, sentAt: Date.now() }));
 }
 
 export async function confirmRegistrationOTP(email: string, token: string): Promise<UserProfile> {
   if (!supabase) throw new Error('Email verification is not configured.');
+  const pending = await getPendingEmailVerification();
+  if (!pending || pending.email !== email.trim().toLowerCase()) throw new Error('This verification was cancelled. Request a new code.');
+  if (Date.now() - pending.sentAt >= EMAIL_CODE_LIFETIME_MS) throw new Error('Your code expired after 3 minutes. Request a new code.');
   if (!/^\d{6}$/.test(token)) throw new Error('Enter the 6-digit code from your email.');
   const { data, error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token, type: 'email' });
   if (error || !data.session || !data.user?.email_confirmed_at) {
@@ -583,6 +637,10 @@ export async function loginUser(
   rawIdentifier: string,
   password: string
 ): Promise<AuthResponse<UserProfile>> {
+  const pendingSignup = await getPendingEmailVerification();
+  if (pendingSignup?.kind === 'signup') {
+    return { success: false, error: 'Finish verification or select Edit registration details to cancel your pending signup first.' };
+  }
   const identifier = rawIdentifier.trim();
 
   // 1. Check Rate Limiter First
@@ -632,95 +690,33 @@ export async function loginUser(
         resolvedEmail = resolveData.email;
       }
 
-      // Supabase Auth SignInWithPassword
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: resolvedEmail,
-        password,
+      await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
+      await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_EMAIL);
+      const { error: previousSignOutError } = await supabase.auth.signOut({ scope: 'local' });
+      if (previousSignOutError) return { success: false, error: 'Unable to start a new sign-in. Please try again.' };
+      const passwordClient = createPasswordCheckClient();
+      const { data: authData, error: authError } = await passwordClient.auth.signInWithPassword({
+        email: resolvedEmail, password,
       });
-
       if (authError || !authData.user?.email_confirmed_at) {
+        await passwordClient.auth.signOut({ scope: 'local' });
         await recordFailedAttempt(identifier);
-        return {
-          success: false,
-          error: 'Invalid credentials. Please check your identifier and password.',
-        };
+        return { success: false, error: 'Invalid credentials. Please check your identifier and password.' };
       }
-
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
-
-      const profile: UserProfile = {
-        isEmailVerified: true,
-        id: authData.user.id,
-        fullName: profileData?.full_name || authData.user.user_metadata?.full_name || 'Customer',
-        username: profileData?.username || authData.user.user_metadata?.username || 'user',
-        email: authData.user.email || resolvedEmail,
-        can: profileData?.can || authData.user.user_metadata?.can || '',
-        sin: formatCANDisplay(profileData?.can || authData.user.user_metadata?.can || ''),
-        householdMembers: profileData?.household_size || 5,
-        majorAppliances: ['Inverter AC (1.5 HP) x 2'],
-        monthlyBudget: profileData?.monthly_budget || 3500,
-        createdAt: profileData?.created_at || new Date().toISOString(),
-      };
-
+      const { error: signOutError } = await passwordClient.auth.signOut({ scope: 'local' });
+      if (signOutError) return { success: false, error: 'Unable to start verification. Please try again.' };
+      const email = authData.user.email!.toLowerCase();
+      const { error: sendError } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+      if (sendError) return { success: false, error: sendError.message };
+      await AsyncStorage.setItem(STORAGE_KEYS.PENDING_EMAIL, JSON.stringify({ email, sentAt: Date.now(), kind: 'login' }));
       await clearRateLimit(identifier);
-      await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(profile));
-      return { success: true, data: profile };
+      return { success: true, verificationRequired: true, verificationEmail: email };
     } catch (e) {
       return { success: false, error: 'Unable to log in. Please try again.' };
     }
   }
 
-  // 4. Local Engine Multi-Identifier Resolution & Verification
-  const users = await getStoredUsers();
-
-  // Find user by Email, Username, or CAN
-  const userEntry = users.find((entry) => {
-    if (identifierType === 'email') {
-      return entry.user.email.toLowerCase() === lowerIdent;
-    }
-    if (identifierType === 'username') {
-      return entry.user.username.toLowerCase() === lowerIdent;
-    }
-    if (identifierType === 'can') {
-      return entry.user.can === cleanDigits;
-    }
-    return false;
-  });
-
-  // Generic Failure response if user does not exist
-  if (!userEntry) {
-    await recordFailedAttempt(identifier);
-    return {
-      success: false,
-      error: 'Invalid credentials. Please check your identifier and password.',
-    };
-  }
-
-  // Verify password hash
-  const computedHash = secureHash(password, userEntry.salt);
-  if (computedHash !== userEntry.passwordHash) {
-    await recordFailedAttempt(identifier);
-    return {
-      success: false,
-      error: 'Invalid credentials. Please check your identifier and password.',
-    };
-  }
-
-  if (!userEntry.user.isEmailVerified) {
-    return { success: false, error: 'Please verify your email before logging in.' };
-  }
-
-  // Login Successful: Reset rate limit, save session, write audit log
-  await clearRateLimit(identifier);
-  await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(userEntry.user));
-  await recordAuditLog('LOGIN_SUCCESS', identifier, { userId: userEntry.user.id });
-
-  return { success: true, data: userEntry.user };
+  return { success: false, error: 'Email verification requires a connection. Please try again online.' };
 }
 
 // ==============================================================================
@@ -728,12 +724,16 @@ export async function loginUser(
 // ==============================================================================
 export async function getActiveSession(): Promise<UserProfile | null> {
   try {
+    if (!isLiveSupabaseConfigured() || !supabase) return null;
     const json = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
     const profile = json ? JSON.parse(json) : null;
-    if (!profile?.isEmailVerified) return null;
+    if (!profile?.isEmailVerified || await getPendingEmailVerification()) return null;
     if (isLiveSupabaseConfigured() && supabase) {
       const { data, error } = await supabase.auth.getUser();
       if (error || data.user?.id !== profile.id || !data.user?.email_confirmed_at) return null;
+      const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assurance.error || !assurance.data?.currentAuthenticationMethods.some(method =>
+        (typeof method === 'string' ? method : method.method) === 'otp')) return null;
     }
     return profile;
   } catch {

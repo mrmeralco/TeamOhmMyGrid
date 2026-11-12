@@ -88,6 +88,8 @@ export interface RateLimitStatus {
 
 export interface AuthResponse<T = any> {
   success: boolean;
+  verificationRequired?: boolean;
+  verificationEmail?: string;
   data?: T;
   error?: string;
   rateLimited?: boolean;

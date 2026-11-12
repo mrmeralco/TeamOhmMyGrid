@@ -4,7 +4,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleShe
 import { EmailDeliveryModal } from '../components/EmailDeliveryModal';
 import { isLiveSupabaseConfigured } from '../config/supabase';
 import { useAuth } from '../context/AuthContext';
-import { confirmRegistrationOTP, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
+import { cancelPendingEmailVerification, confirmRegistrationOTP, EMAIL_CODE_LIFETIME_MS, forgetPendingEmailVerification, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
 import { RegistrationFormData, UserProfile } from '../types/auth';
 import { evaluatePassword, validateConfirmPassword, validateEmail, validateFullName, validatePassword, validateUsername } from '../utils/validation';
 
@@ -31,6 +31,7 @@ export default function RegisterScreen() {
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [code, setCode] = useState('');
   const [resendAt, setResendAt] = useState(0);
+  const [expiresAt, setExpiresAt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('');
   const [registeredUser, setRegisteredUser] = useState<UserProfile | null>(null);
@@ -39,10 +40,11 @@ export default function RegisterScreen() {
   useEffect(() => {
     let active = true;
     getPendingEmailVerification().then(pending => {
-      if (!active || !pending || !configured) return;
+      if (!active || !pending || pending.kind !== 'signup' || !configured) return;
       setPendingEmail(pending.email);
       setForm(prev => ({ ...prev, email: pending.email }));
       setResendAt(pending.sentAt + 60000);
+      setExpiresAt(pending.sentAt + EMAIL_CODE_LIFETIME_MS);
       setVerificationOpen(true);
     }).catch(() => {});
     return () => { active = false; };
@@ -82,6 +84,7 @@ export default function RegisterScreen() {
       setNotice('');
       setNow(Date.now());
       setResendAt(Date.now() + 60000);
+      setExpiresAt(Date.now() + EMAIL_CODE_LIFETIME_MS);
       setVerificationOpen(true);
       setForm(prev => ({ ...prev, password: '', confirmPassword: '' }));
       setShowPassword(false);
@@ -89,7 +92,7 @@ export default function RegisterScreen() {
     finally { setBusy(false); }
   };
   const verify = async () => {
-    if (busy || code.length !== 6) return;
+    if (busy || code.length !== 6 || expirySeconds === 0 || Date.now() >= expiresAt) return;
     setBusy(true); setError(''); setNotice('');
     try {
       const profile = await confirmRegistrationOTP(pendingEmail, code);
@@ -101,13 +104,38 @@ export default function RegisterScreen() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to verify your code.'); }
     finally { setBusy(false); }
   };
+  const expirySeconds = Math.max(0, Math.ceil((expiresAt - now) / 1000));
+  const editRegistration = async () => {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      await cancelPendingEmailVerification();
+      setVerificationOpen(false); setPendingEmail(''); setCode(''); setNotice('');
+      setResendAt(0); setExpiresAt(0);
+      setForm(prev => ({ ...prev, password: '', confirmPassword: '' }));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to cancel registration.'); }
+    finally { setBusy(false); }
+  };
   const remaining = Math.max(0, Math.ceil((resendAt - now) / 1000));
+  const restartOnDevice = async () => {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      await forgetPendingEmailVerification();
+      setVerificationOpen(false); setPendingEmail(''); setCode('');
+      setResendAt(0); setExpiresAt(0);
+      setForm(prev => ({ ...prev, password: '', confirmPassword: '' }));
+      setNotice('Saved verification cleared on this device. Enter your details to start again. If your account still exists, log in instead.');
+    } catch { setError('Could not clear the saved verification. Please try again.'); }
+    finally { setBusy(false); }
+  };
   const resend = async () => {
     if (busy || remaining) return;
     setBusy(true); setError(''); setNotice('');
     try {
       await resendRegistrationOTP(pendingEmail);
       setCode(''); setNow(Date.now()); setResendAt(Date.now() + 60000);
+      setExpiresAt(Date.now() + EMAIL_CODE_LIFETIME_MS);
       setNotice('A new code was requested. Check your inbox and spam folder.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to send a new code.'); }
     finally { setBusy(false); }
@@ -131,21 +159,28 @@ export default function RegisterScreen() {
           {!!error && <View style={styles.banner}><Text accessibilityRole="alert" style={styles.bannerText}>{error}</Text></View>}
           {verificationOpen ? (
             <View>
-              <Field label="Verification code" value={code} onChangeText={value => { setCode(value.replace(/\D/g, '')); setError(''); }} placeholder="000000" maxLength={6} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" editable={!busy} onSubmitEditing={verify} />
-              <Text style={styles.helper}>Check your spam folder if the email is missing.</Text>
+              <Field label="Verification code" value={code} onChangeText={value => { setCode(value.replace(/\D/g, '')); setError(''); }} placeholder="000000" maxLength={6} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" editable={!busy && expirySeconds > 0} onSubmitEditing={verify} />
+              <Text style={styles.helper}>{expirySeconds > 0 ? `Code expires in ${Math.floor(expirySeconds / 60)}:${String(expirySeconds % 60).padStart(2, '0')}` : 'Code expired after 3 minutes. Request a new code to continue.'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={styles.helper}>{notice}</Text>}
-              <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || code.length !== 6) && styles.disabled]} disabled={busy || code.length !== 6} onPress={verify}>
+              <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || code.length !== 6 || expirySeconds === 0) && styles.disabled]} disabled={busy || code.length !== 6 || expirySeconds === 0} onPress={verify}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify email</Text>}
               </TouchableOpacity>
               <TouchableOpacity accessibilityRole="button" style={styles.link} disabled={busy || remaining > 0} onPress={resend}>
                 <Text style={[styles.linkText, remaining > 0 && styles.muted]}>{remaining > 0 ? `Resend code in ${remaining}s` : 'Resend code'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity accessibilityRole="button" style={styles.link} disabled={busy} onPress={() => { setVerificationOpen(false); setError(''); setNotice(''); }}>
+              <TouchableOpacity accessibilityRole="button" style={styles.link} disabled={busy} onPress={editRegistration}>
                 <Text style={styles.secondaryLink}>Edit registration details</Text>
               </TouchableOpacity>
+              <View style={styles.recovery}>
+                <Text style={styles.helper}>Reset your database or stuck with an old code? Clear the saved verification on this device. This does not delete an account or verify your email.</Text>
+                <TouchableOpacity accessibilityRole="button" style={styles.link} disabled={busy} onPress={restartOnDevice}>
+                  <Text style={styles.linkText}>Start over on this device</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <View>
+              {!!notice && <Text accessibilityLiveRegion="polite" style={styles.helper}>{notice}</Text>}
               <Field label="Full name" placeholder="Your full name" value={form.fullName} onChangeText={value => change('fullName', value)} error={errors.fullName} autoComplete="name" editable={!busy} />
               <Field label="Username" placeholder="4–20 letters or numbers" value={form.username} onChangeText={value => change('username', value.trim().toLowerCase())} error={errors.username} autoCapitalize="none" autoCorrect={false} editable={!busy} />
               <Field label="Email address" placeholder="you@example.com" value={form.email} onChangeText={value => change('email', value.trim())} error={errors.email} keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} editable={!busy} />
@@ -198,5 +233,6 @@ const styles = StyleSheet.create({
   linkText: { color: '#c2410c', fontSize: 13, fontWeight: '600' },
   secondaryLink: { color: '#475569', fontSize: 13 },
   muted: { color: '#64748b' },
+  recovery: { marginTop: 22, paddingTop: 18, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   footer: { alignItems: 'center', marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
 });
