@@ -31,6 +31,9 @@ export const PRESET_CAN_PROFILES: CANProfile[] = [
     ratePerKwh: 11.43,
     budget: 3500,
     currentKwh: 188,
+    meterType: 'AMI',
+    meterSerialNumber: 'MR-AMI-4410',
+    lastReadingDate: '2026-05-14',
     billData: {
       customerAccountNumber: '0192-8823-4410',
       billingPeriod: {
@@ -53,6 +56,9 @@ export const PRESET_CAN_PROFILES: CANProfile[] = [
     ratePerKwh: 11.48,
     budget: 5000,
     currentKwh: 385,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-3321',
+    lastReadingDate: '2026-05-14',
     billData: {
       customerAccountNumber: '0284-9102-3321',
       billingPeriod: {
@@ -75,6 +81,9 @@ export const PRESET_CAN_PROFILES: CANProfile[] = [
     ratePerKwh: 11.43,
     budget: 2500,
     currentKwh: 125,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-5562',
+    lastReadingDate: '2026-05-14',
     billData: {
       customerAccountNumber: '0341-7789-5562',
       billingPeriod: {

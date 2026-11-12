@@ -54,4 +54,76 @@ describe('Gemini Service Client / Offline Fallbacks', () => {
       expect(bill.verifiedByUser).toBe(false);
     });
   });
+
+  describe('Multi-turn Gemini Conversation with API key', () => {
+    const originalFetch = global.fetch;
+
+    beforeEach(() => {
+      process.env.ENABLE_GEMINI_IN_TEST = '1';
+      process.env.EXPO_PUBLIC_GEMINI_API_KEY = 'test-gemini-key';
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+      delete process.env.ENABLE_GEMINI_IN_TEST;
+    });
+
+    it('sends prior user and model conversation turns in contents and returns AI response', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Oo Juan, tanda ko ang 1.5HP aircon mo sa Bahay!' }],
+              },
+            },
+          ],
+        }),
+      });
+      global.fetch = mockFetch as any;
+
+      const history = [
+        { sender: 'tipi' as const, text: 'Kamusta! Ako si Tipi.' },
+        { sender: 'user' as const, text: 'Ako si Juan, 1.5HP ang aircon ko.' },
+        { sender: 'tipi' as const, text: 'Nice to meet you Juan! Matipid ba ang 1.5HP aircon mo?' },
+      ];
+
+      const reply = await processTextQuery(
+        'Naaalala mo ba kung ilang HP ang aircon ko?',
+        { ...context, meterType: 'AMI', can: '0192-8823-4410', profileName: 'Bahay' },
+        history
+      );
+
+      expect(reply).toBe('Oo Juan, tanda ko ang 1.5HP aircon mo sa Bahay!');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, options] = mockFetch.mock.calls[0];
+      const payload = JSON.parse(options.body);
+      expect(payload.contents).toEqual([
+        { role: 'user', parts: [{ text: 'Ako si Juan, 1.5HP ang aircon ko.' }] },
+        { role: 'model', parts: [{ text: 'Nice to meet you Juan! Matipid ba ang 1.5HP aircon mo?' }] },
+        { role: 'user', parts: [{ text: 'Naaalala mo ba kung ilang HP ang aircon ko?' }] },
+      ]);
+      expect(payload.systemInstruction.parts[0].text).toContain('Bahay');
+    });
+
+    it('falls back to secondary Gemini model when primary returns 503', async () => {
+      const mockFetch = jest
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503 })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: 'Sagot mula sa fallback model.' }] } }],
+          }),
+        });
+      global.fetch = mockFetch as any;
+
+      const reply = await processTextQuery('Ano ang konsumo ko?', context, []);
+      expect(reply).toBe('Sagot mula sa fallback model.');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
 });

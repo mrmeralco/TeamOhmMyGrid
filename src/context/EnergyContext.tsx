@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ExtractedBillData, SmartPlugDevice, SmartPlugSchedule, CANProfile } from '../types';
+import { ExtractedBillData, SmartPlugDevice, SmartPlugSchedule, CANProfile, MeterType } from '../types';
 import { mockSmartPlugService } from '../lib/mockSmartPlugService';
 import { smartPlugSimulator, INITIAL_SMART_PLUGS } from '../lib/smartPlugSimulator';
 import { calculateMeralcoBill } from '../lib/tariffEngine';
@@ -8,6 +8,7 @@ import { MOCK_USER, PRESET_CAN_PROFILES } from '../constants/mockData';
 import { useAuth } from './AuthContext';
 import { cleanCAN, formatCANDisplay } from '../utils/validation';
 import { UserProfile } from '../types/auth';
+import { resolveMeterType } from '../services/meralcoApiService';
 
 export interface ChatHistoryItem {
   sender: 'user' | 'tipi';
@@ -48,7 +49,7 @@ export interface EnergyContextValue extends EnergyState {
   setVoiceRecordingState: (recording: boolean, secondsLeft?: number) => void;
   switchCanProfile: (id: string) => void;
   renameCanProfile: (id: string, newName: string) => void;
-  addCanProfile: (name: string, accountNumber: string, serviceAddress?: string) => void;
+  addCanProfile: (name: string, accountNumber: string, serviceAddress?: string, meterType?: MeterType) => void;
   deleteCanProfile: (id: string) => void;
 }
 
@@ -58,16 +59,24 @@ export function createDefaultUserCanProfiles(user: {
   can?: string;
   monthlyBudget?: number;
   serviceAddress?: string;
+  meterType?: MeterType;
+  meterSerialNumber?: string;
+  lastReadingDate?: string;
 }): CANProfile[] {
   const rawCan = user.can || '1234567890';
+  const cleanDigits = cleanCAN(rawCan);
   const formattedCan = formatCANDisplay(rawCan);
   const budget = user.monthlyBudget && user.monthlyBudget > 0 ? user.monthlyBudget : 3500;
   const customerName = user.fullName || 'Customer';
   const serviceAddress = user.serviceAddress || 'Meralco Franchise Area, Metro Manila';
+  const resolvedMeterType: MeterType = user.meterType || resolveMeterType(rawCan);
+  const meterSerialNumber =
+    user.meterSerialNumber ||
+    (resolvedMeterType === 'AMI' ? `MR-AMI-${cleanDigits.slice(-4)}` : `MR-ANA-${cleanDigits.slice(-4)}`);
 
   return [
     {
-      id: `can-${cleanCAN(rawCan) || user.id || 'primary'}`,
+      id: `can-${cleanDigits || user.id || 'primary'}`,
       name: 'Bahay',
       accountNumber: formattedCan,
       customerName,
@@ -75,6 +84,9 @@ export function createDefaultUserCanProfiles(user: {
       ratePerKwh: 11.43,
       budget,
       currentKwh: 188,
+      meterType: resolvedMeterType,
+      meterSerialNumber,
+      lastReadingDate: user.lastReadingDate || '2026-05-14',
       billData: {
         customerAccountNumber: formattedCan,
         billingPeriod: {
@@ -91,7 +103,7 @@ export function createDefaultUserCanProfiles(user: {
   ];
 }
 
-const DEFAULT_BILL: ExtractedBillData = PRESET_CAN_PROFILES[0].billData;
+const DEFAULT_BILL: ExtractedBillData | null = PRESET_CAN_PROFILES[0].billData || null;
 
 const DEFAULT_STATE: EnergyState = {
   budget: 3500,
@@ -198,7 +210,14 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                     p.customerName === 'Maria Santos (Condo)'
                 );
                 if (!isOldMock) {
-                  loadedProfiles = parsed;
+                  loadedProfiles = parsed.map((p: any) => ({
+                    ...p,
+                    meterType: p.meterType || resolveMeterType(p.accountNumber || p.id),
+                    meterSerialNumber:
+                      p.meterSerialNumber ||
+                      ((p.meterType || resolveMeterType(p.accountNumber || p.id)) === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') +
+                        cleanCAN(p.accountNumber || p.id).slice(-4),
+                  }));
                 }
               }
             } catch {
@@ -225,7 +244,7 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             loadedProfiles.find((p) => p.id === resolvedCanId) || loadedProfiles[0];
 
           setBudgetState(currentProfile.budget);
-          setActiveBillState(currentProfile.billData);
+          setActiveBillState(currentProfile.billData || null);
           setCurrentKwh(currentProfile.currentKwh);
           const initialBill = calculateMeralcoBill(currentProfile.currentKwh);
           setProjected(initialBill.totalAmountDue);
@@ -238,7 +257,14 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             try {
               const parsed = JSON.parse(savedCanProfiles);
               if (Array.isArray(parsed) && parsed.length > 0) {
-                loadedProfiles = parsed;
+                loadedProfiles = parsed.map((p: any) => ({
+                  ...p,
+                  meterType: p.meterType || resolveMeterType(p.accountNumber || p.id),
+                  meterSerialNumber:
+                    p.meterSerialNumber ||
+                    ((p.meterType || resolveMeterType(p.accountNumber || p.id)) === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') +
+                      cleanCAN(p.accountNumber || p.id).slice(-4),
+                }));
               }
             } catch {}
           }
@@ -254,7 +280,7 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const currentProfile =
             loadedProfiles.find((p) => p.id === resolvedCanId) || loadedProfiles[0];
           setBudgetState(currentProfile.budget);
-          setActiveBillState(currentProfile.billData);
+          setActiveBillState(currentProfile.billData || null);
           setCurrentKwh(currentProfile.currentKwh);
           const initialBill = calculateMeralcoBill(currentProfile.currentKwh);
           setProjected(initialBill.totalAmountDue);
@@ -320,7 +346,7 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const { activeCanKey, billKey, budgetKey } = getStorageKeys(user?.id);
     AsyncStorage.setItem(activeCanKey, id).catch(() => {});
 
-    setActiveBillState(target.billData);
+    setActiveBillState(target.billData || null);
     AsyncStorage.setItem(billKey, JSON.stringify(target.billData)).catch(() => {});
 
     setBudgetState(target.budget);
@@ -340,10 +366,16 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  const addCanProfile = (name: string, accountNumber: string, serviceAddress?: string) => {
+  const addCanProfile = (
+    name: string,
+    accountNumber: string,
+    serviceAddress?: string,
+    meterType?: MeterType
+  ) => {
     const clean = cleanCAN(accountNumber);
     if (!clean || clean.length !== 10) return;
     const formatted = formatCANDisplay(clean);
+    const resolvedMeterType: MeterType = meterType || resolveMeterType(clean);
     const newProfile: CANProfile = {
       id: `can-${clean}-${Date.now()}`,
       name: name.trim() || `CAN ${formatted}`,
@@ -353,6 +385,10 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ratePerKwh: 11.43,
       budget: budget || 3500,
       currentKwh: 150,
+      meterType: resolvedMeterType,
+      meterSerialNumber:
+        (resolvedMeterType === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') + clean.slice(-4),
+      lastReadingDate: '2026-05-14',
       billData: {
         customerAccountNumber: formatted,
         billingPeriod: {
@@ -385,7 +421,7 @@ export const EnergyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setActiveCanId(nextActive.id);
         AsyncStorage.setItem(activeCanKey, nextActive.id).catch(() => {});
         setBudgetState(nextActive.budget);
-        setActiveBillState(nextActive.billData);
+        setActiveBillState(nextActive.billData || null);
         setCurrentKwh(nextActive.currentKwh);
         recalculateBill(nextActive.currentKwh);
       }

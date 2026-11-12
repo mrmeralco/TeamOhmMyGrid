@@ -15,7 +15,7 @@ async function generate(scenario: UsageScenario): Promise<UsageAnalysis> {
   const demo = getUsageDemo(scenario);
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 35000 } });
   const result = await client.interactions.create({
-    model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
     input: 'You are Tipi, a concise Filipino household energy coach. Analyze this mock dataset: ' + JSON.stringify(demo) +
       '. Each reading is average W for one hour. 13:00-16:00 is exactly three hours; evening is 18:00-24:00. ' +
       'Use projected_final_bill exactly ' + demo.projected + ', and will_exceed_budget exactly ' + (demo.projected > demo.budget) + '. ' +

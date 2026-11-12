@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -16,6 +18,21 @@ import { UsageAnalysisCard } from '../../components/UsageAnalysisCard';
 import { TipiMascot } from '../../components/TipiMascot';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
+import { MeterClassificationBadge } from '../../components/MeterClassificationBadge';
+import { AmiCurveGraphCard } from '../../components/AmiCurveGraphCard';
+import { AmiPeakBreakdownCard } from '../../components/AmiPeakBreakdownCard';
+import { AnalogPhotographyGuideModal } from '../../components/AnalogPhotographyGuideModal';
+import { AnalogMeterVerificationDrawer } from '../../components/AnalogMeterVerificationDrawer';
+import { WeeklyAnalogCurveGraph } from '../../components/WeeklyAnalogCurveGraph';
+import {
+  captureMeterPhoto,
+  extractAnalogMeterReading,
+  saveAnalogMeterLog,
+  getWeeklyAnalogSummary,
+  kwhToDials,
+} from '../../services/analogMeterService';
+import { AnalogMeterLogEntry, AnalogMeterType, WeeklyAnalogSummary } from '../../types/analogMeter';
+import { AmiTimeframe } from '../../types/amiTelemetry';
 import { calculateTierCliff } from '../../lib/tariffEngine';
 import { formatCANDisplay } from '../../utils/validation';
 import { MOCK_USER } from '../../constants/mockData';
@@ -28,6 +45,7 @@ export default function HomeScreen() {
     projected,
     currentKwh,
     activeBill,
+    setActiveBill,
     activeCanProfile,
   } = useEnergy();
 
@@ -40,6 +58,106 @@ export default function HomeScreen() {
     MOCK_USER.accountNumber;
   const profileName = activeCanProfile?.name || 'Bahay';
   const ratePerKwh = activeCanProfile?.ratePerKwh || MOCK_USER.ratePerKwh;
+  const meterType = activeCanProfile?.meterType || 'AMI';
+  const isAmi = meterType === 'AMI';
+  const meterSerial =
+    activeCanProfile?.meterSerialNumber ||
+    (isAmi ? 'MR-AMI-4410' : 'MR-ANA-3321');
+  const lastReadingDate = activeCanProfile?.lastReadingDate || '2026-05-14';
+
+  // AMI Synchronized Timeframe State (Day, Week, Month, Year)
+  const [amiTimeframe, setAmiTimeframe] = useState<AmiTimeframe>('day');
+
+  // Analog Modal & Drawer State
+  const [guideModalVisible, setGuideModalVisible] = useState<boolean>(false);
+  const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
+  const [capturing, setCapturing] = useState<boolean>(false);
+  const [analogSubtype, setAnalogSubtype] = useState<AnalogMeterType>('dial');
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | undefined>(undefined);
+  const [pendingReadingKwh, setPendingReadingKwh] = useState<number>(14285);
+  const [pendingDials, setPendingDials] = useState<number[]>([1, 4, 2, 8, 5]);
+  const [weeklySummary, setWeeklySummary] = useState<WeeklyAnalogSummary | undefined>(undefined);
+
+  // Load analog weekly summary on CAN / profile change
+  const loadAnalogSummary = useCallback(async () => {
+    if (!isAmi && canNumber) {
+      try {
+        const s = await getWeeklyAnalogSummary(canNumber, budget, ratePerKwh);
+        setWeeklySummary(s);
+      } catch {
+        // ignore error
+      }
+    }
+  }, [isAmi, canNumber, budget, ratePerKwh]);
+
+  useEffect(() => {
+    loadAnalogSummary();
+  }, [loadAnalogSummary]);
+
+  // Analog Photo Capture Handler
+  const handleCaptureAnalogPhoto = async (preferredSubtype?: AnalogMeterType) => {
+    const activeSubtype = preferredSubtype || analogSubtype;
+    if (preferredSubtype) {
+      setAnalogSubtype(preferredSubtype);
+    }
+    try {
+      setCapturing(true);
+      const captureResult = await captureMeterPhoto();
+      if (!captureResult.canceled && captureResult.uri) {
+        setPendingPhotoUri(captureResult.uri);
+
+        const previousReading =
+          weeklySummary?.currentReadingKwh || activeCanProfile?.currentKwh || 14240;
+        const extracted = await extractAnalogMeterReading(
+          captureResult.base64 || '',
+          previousReading,
+          activeSubtype
+        );
+
+        setAnalogSubtype(extracted.meterType || activeSubtype);
+        setPendingReadingKwh(extracted.readingKwh);
+        setPendingDials(extracted.dials);
+        setDrawerVisible(true);
+      }
+    } catch {
+      Alert.alert('Paalala', 'Hindi matagumpay ang pagkuha ng litrato ng meter.');
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  // Manual encode trigger for analog meters
+  const handleManualAnalogInput = () => {
+    const prev = weeklySummary?.currentReadingKwh || activeCanProfile?.currentKwh || 14240;
+    setPendingReadingKwh(prev);
+    setPendingDials(kwhToDials(prev));
+    setPendingPhotoUri(undefined);
+    setDrawerVisible(true);
+  };
+
+  // Save confirmed reading from verification drawer
+  const handleConfirmAnalogLog = async (entry: AnalogMeterLogEntry) => {
+    try {
+      await saveAnalogMeterLog(entry);
+      setAnalogSubtype(entry.meterType);
+      if (activeBill && entry.normalizedWeeklyKwh > 0) {
+        const projectedMonthlyKwh = Math.round(entry.normalizedWeeklyKwh * 4.3);
+        setActiveBill({
+          ...activeBill,
+          totalKwh: projectedMonthlyKwh,
+          totalAmountDue: Math.round(projectedMonthlyKwh * ratePerKwh * 100) / 100,
+        });
+      }
+      setDrawerVisible(false);
+      await loadAnalogSummary();
+      Alert.alert(
+        'Tagumpay',
+        `Nai-save ang analog reading: ${entry.readingKwh.toLocaleString()} kWh (+${entry.normalizedWeeklyKwh} kWh/linggo).`
+      );
+    } catch {
+      Alert.alert('Error', 'Hindi nai-save ang analog reading.');
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
@@ -56,6 +174,20 @@ export default function HomeScreen() {
             <Text style={[styles.canSubtitle, { color: theme.muted, fontSize: 13 * fontScale }]}>
               CAN: {canNumber} · {profileName}
             </Text>
+            {/* Meter Classification Badge */}
+            <View style={styles.badgeWrapper}>
+              <MeterClassificationBadge
+                meterType={meterType}
+                size="standard"
+                showIcon
+                showSubtitle
+                onPress={() => {
+                  if (!isAmi) {
+                    setGuideModalVisible(true);
+                  }
+                }}
+              />
+            </View>
           </View>
           <View style={styles.headerRightGroup}>
             <TipiMascot size="mini" />
@@ -69,6 +201,100 @@ export default function HomeScreen() {
 
         {/* Tipi Gemini AI Usage & Budget Analysis Card */}
         <UsageAnalysisCard />
+
+        {/* Dynamic Workflow Routing Conditioned on meterType */}
+        {isAmi ? (
+          <View style={styles.workflowSection} testID="ami-dashboard-section">
+            {/* Dynamic Multi-Timeframe AMI SVG Curve Graph */}
+            <AmiCurveGraphCard
+              can={canNumber}
+              timeframe={amiTimeframe}
+              initialTimeframe="day"
+              onTimeframeChange={setAmiTimeframe}
+            />
+
+            {/* AMI Peak vs Off-Peak Analytics Card */}
+            <AmiPeakBreakdownCard
+              can={canNumber}
+              timeframe={amiTimeframe}
+              onShiftSavingsPress={() => router.push('/whatif')}
+            />
+          </View>
+        ) : (
+          <View style={styles.workflowSection} testID="analog-dashboard-section">
+            {/* Analog Meter Action & Status Card */}
+            <View
+              style={[
+                styles.analogActionCard,
+                { backgroundColor: theme.surface, borderColor: theme.line },
+              ]}
+            >
+              <View style={styles.analogHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.analogCardTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
+                    Analog Meter Log ⏱️
+                  </Text>
+                  <Text style={[styles.analogCardSub, { color: theme.muted, fontSize: 12 * fontScale }]}>
+                    {lastReadingDate} · {meterSerial}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.guideTriggerBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
+                  onPress={() => setGuideModalVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Buksan ang gabay sa pagbasa ng analog meter"
+                >
+                  <Text style={[styles.guideTriggerText, { color: theme.brand, fontSize: 12 * fontScale }]}>
+                    📖 Gabay
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Action Buttons Row */}
+              <View style={styles.analogBtnRow}>
+                <TouchableOpacity
+                  style={[styles.cameraCaptureBtn, { backgroundColor: theme.brand }]}
+                  onPress={() => handleCaptureAnalogPhoto()}
+                  disabled={capturing}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kunan ng litrato ang analog meter"
+                >
+                  {capturing ? (
+                    <ActivityIndicator color={theme.brandInk} size="small" />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.cameraCaptureBtnText,
+                        { color: theme.brandInk, fontSize: 13.5 * fontScale },
+                      ]}
+                    >
+                      📷 Kunan ng Litrato
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.manualEncodeBtn, { backgroundColor: theme.cont, borderColor: theme.line }]}
+                  onPress={handleManualAnalogInput}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manu-manong i-encode ang reading"
+                >
+                  <Text style={[styles.manualEncodeBtnText, { color: theme.ink, fontSize: 13 * fontScale }]}>
+                    ✍️ I-encode
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Weekly Analog Curve Graph with Budget Ceiling Reference */}
+            <WeeklyAnalogCurveGraph
+              can={canNumber}
+              monthlyBudget={budget}
+              effectiveRate={ratePerKwh}
+              summary={weeklySummary}
+            />
+          </View>
+        )}
 
         {/* Live Grid Metrics Row */}
         <View style={styles.metricsRow}>
@@ -99,11 +325,11 @@ export default function HomeScreen() {
           accessibilityLabel="Buksan ang What-If Watt Calculator"
         >
           <View style={styles.actionCardContent}>
-            <Text style={[styles.actionCardTitle, { color: theme.brandInk, fontSize: 18 * fontScale }]}>
+            <Text style={[styles.actionCardTitle, { color: theme.brandInk, fontSize: 16.5 * fontScale }]}>
               What-If Watt-Calculator 💡
             </Text>
-            <Text style={[styles.actionCardSub, { color: theme.brandInk, fontSize: 13 * fontScale }]}>
-              Tingnan ang matitipid sa pag-adjust ng aircon at appliances.
+            <Text style={[styles.actionCardSub, { color: theme.brandInk, fontSize: 12.5 * fontScale }]}>
+              Kalkulahin ang tipid sa appliances.
             </Text>
           </View>
         </TouchableOpacity>
@@ -115,16 +341,39 @@ export default function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="I-scan ang Meralco Bill"
         >
-          <Text style={[styles.secondaryTitle, { color: theme.ink, fontSize: 16 * fontScale }]}>
+          <Text style={[styles.secondaryTitle, { color: theme.ink, fontSize: 15.5 * fontScale }]}>
             I-scan ang Meralco Bill 📄
           </Text>
-          <Text style={[styles.secondarySub, { color: theme.muted, fontSize: 13 * fontScale }]}>
-            Kumuha ng litrato o mag-upload ng kopya ng bill.
+          <Text style={[styles.secondarySub, { color: theme.muted, fontSize: 12.5 * fontScale }]}>
+            I-upload ang litrato ng iyong bill.
           </Text>
         </TouchableOpacity>
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Analog Photography Guidance Modal */}
+      <AnalogPhotographyGuideModal
+        visible={guideModalVisible}
+        onClose={() => setGuideModalVisible(false)}
+        initialMeterType={analogSubtype}
+        onProceedToCamera={(selectedType) => handleCaptureAnalogPhoto(selectedType)}
+      />
+
+      {/* Analog Meter Manual Verification Drawer */}
+      <AnalogMeterVerificationDrawer
+        visible={drawerVisible}
+        can={canNumber}
+        initialReadingKwh={pendingReadingKwh}
+        initialDials={pendingDials}
+        initialMeterType={analogSubtype}
+        previousReadingKwh={weeklySummary?.currentReadingKwh || activeCanProfile?.currentKwh || 14240}
+        photoUri={pendingPhotoUri}
+        effectiveRate={ratePerKwh}
+        onConfirm={handleConfirmAnalogLog}
+        onRetake={() => handleCaptureAnalogPhoto()}
+        onCancel={() => setDrawerVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -140,7 +389,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 6,
   },
   headerTextGroup: {
@@ -158,25 +407,65 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
-  forecastBox: {
-    borderRadius: 14,
+  badgeWrapper: {
+    marginTop: 6,
+  },
+  workflowSection: {
+    marginVertical: 4,
+  },
+  analogActionCard: {
+    borderRadius: 16,
     borderWidth: 1.5,
-    padding: 12,
+    padding: 14,
     marginVertical: 6,
   },
-  forecastBody: {
-    lineHeight: 18,
-    fontWeight: '600',
+  analogHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  cliffCard: {
-    borderRadius: 14,
-    borderWidth: 1.5,
-    padding: 12,
-    marginVertical: 6,
+  analogCardTitle: {
+    fontWeight: '800',
   },
-  cliffText: {
-    fontWeight: '600',
-    lineHeight: 18,
+  analogCardSub: {
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  guideTriggerBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginLeft: 8,
+  },
+  guideTriggerText: {
+    fontWeight: '700',
+  },
+  analogBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cameraCaptureBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraCaptureBtnText: {
+    fontWeight: '800',
+  },
+  manualEncodeBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manualEncodeBtnText: {
+    fontWeight: '700',
   },
   metricsRow: {
     flexDirection: 'row',

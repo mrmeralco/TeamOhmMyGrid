@@ -1,5 +1,7 @@
 export type AppLanguage = 'taglish' | 'filipino' | 'english';
 
+export type MeterType = 'AMI' | 'Analog';
+
 export interface CANProfile {
   id: string;
   name: string;
@@ -9,7 +11,10 @@ export interface CANProfile {
   ratePerKwh: number;
   budget: number;
   currentKwh: number;
-  billData: ExtractedBillData;
+  meterType: MeterType;
+  meterSerialNumber?: string;
+  lastReadingDate?: string;
+  billData?: ExtractedBillData | null;
 }
 
 export interface MeralcoRateTable {
@@ -119,3 +124,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
 }
+
+export * from './amiTelemetry';
+
+export * from './analogMeter';

@@ -22,6 +22,7 @@ import { useEnergy } from '../../context/EnergyContext';
 import { TEAM_INFO, MOCK_USER } from '../../constants/mockData';
 import { HeaderAlertButton } from '../../components/HeaderAlertButton';
 import { HeaderSettingsButton } from '../../components/HeaderSettingsButton';
+import { MeterClassificationBadge } from '../../components/MeterClassificationBadge';
 import { formatCANDisplay } from '../../utils/validation';
 
 export default function ProfileScreen() {
@@ -487,6 +488,13 @@ export default function ProfileScreen() {
                         <Text style={[styles.canItemNumber, { color: theme.brand, fontSize: 12 * fontScale }]}>
                           CAN: {p.accountNumber}
                         </Text>
+                        <View style={{ marginTop: 4, marginBottom: 2 }}>
+                          <MeterClassificationBadge
+                            meterType={p.meterType || 'AMI'}
+                            size="compact"
+                            showSubtitle={false}
+                          />
+                        </View>
                         <Text style={[styles.canItemSub, { color: theme.muted, fontSize: 11 * fontScale }]}>
                           {p.serviceAddress} · ₱{p.ratePerKwh}/kWh
                         </Text>

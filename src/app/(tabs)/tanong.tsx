@@ -401,6 +401,7 @@ export default function TanongScreen() {
     addChatMessage,
     registerVoiceTrigger,
     setVoiceRecordingState,
+    activeCanProfile,
   } = useEnergy();
 
   const [inputQuery, setInputQuery] = useState('');
@@ -548,6 +549,8 @@ export default function TanongScreen() {
     const capturedAudioBase64 = capturedAudioRef.current || (await stopRecording());
     capturedAudioRef.current = null;
 
+    const priorHistory = [...chatHistory];
+
     // Commit user message to chat history
     addChatMessage('user', finalSpeechText);
     setLatestVoiceIndex(chatHistory.length);
@@ -561,10 +564,19 @@ export default function TanongScreen() {
       }, 50);
     }
 
-    // Start API query in background
+    const queryContext = {
+      totalKwh: currentKwh,
+      budget,
+      projected,
+      meterType: activeCanProfile?.meterType,
+      can: activeCanProfile?.accountNumber,
+      profileName: activeCanProfile?.name,
+    };
+
+    // Start API query in background with multi-turn conversation history
     const queryPromise = capturedAudioBase64
-      ? processVoiceQuery(capturedAudioBase64, { totalKwh: currentKwh, budget, projected })
-      : processTextQuery(finalSpeechText, { totalKwh: currentKwh, budget, projected });
+      ? processVoiceQuery(capturedAudioBase64, queryContext, priorHistory, finalSpeechText)
+      : processTextQuery(finalSpeechText, queryContext, priorHistory);
 
     // AI thinking & vocalized response
     try {
@@ -601,10 +613,11 @@ export default function TanongScreen() {
     calculateTargetDistance,
     stopRecording,
     addChatMessage,
-    chatHistory.length,
+    chatHistory,
     currentKwh,
     budget,
     projected,
+    activeCanProfile,
   ]);
 
   useEffect(() => {
@@ -620,6 +633,7 @@ export default function TanongScreen() {
     const query = (textToSend || inputQuery).trim();
     if (!query || loading) return;
 
+    const priorHistory = [...chatHistory];
     setInputQuery('');
     setLatestVoiceIndex(null);
     addChatMessage('user', query);
@@ -634,7 +648,18 @@ export default function TanongScreen() {
       // 1.0s significant thinking delay after prompt
       const minThinkingDelay = new Promise((resolve) => setTimeout(resolve, 1000));
       const [response] = await Promise.all([
-        processTextQuery(query, { totalKwh: currentKwh, budget, projected }),
+        processTextQuery(
+          query,
+          {
+            totalKwh: currentKwh,
+            budget,
+            projected,
+            meterType: activeCanProfile?.meterType,
+            can: activeCanProfile?.accountNumber,
+            profileName: activeCanProfile?.name,
+          },
+          priorHistory
+        ),
         minThinkingDelay,
       ]);
       addChatMessage('tipi', response);

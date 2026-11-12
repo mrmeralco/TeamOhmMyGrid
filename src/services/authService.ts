@@ -6,6 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isLiveSupabaseConfigured, supabase } from '../config/supabase';
+import { resolveMeterType } from './meralcoApiService';
 import {
   AuthResponse,
   CustomerRecord,
@@ -48,6 +49,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 5,
     majorAppliances: ['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
     isRegistered: false,
+    meterType: 'AMI',
+    meterSerialNumber: 'MR-AMI-7890',
   },
   {
     can: '1234567891',
@@ -60,6 +63,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 4,
     majorAppliances: ['Inverter AC (1.0 HP) x 2', 'Induction Cooker', 'Water Heater'],
     isRegistered: false,
+    meterType: 'AMI',
+    meterSerialNumber: 'MR-AMI-7891',
   },
   {
     can: '1234567892',
@@ -72,6 +77,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 3,
     majorAppliances: ['Inverter AC (2.0 HP) x 1', 'Gaming PC', 'Smart TV 55"'],
     isRegistered: false,
+    meterType: 'AMI',
+    meterSerialNumber: 'MR-AMI-7892',
   },
   {
     can: '1234567893',
@@ -84,6 +91,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 4,
     majorAppliances: ['Inverter AC (1.0 HP) x 1', 'Refrigerator', 'Electric Fan x 3'],
     isRegistered: false,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-7893',
   },
   {
     can: '1234567894',
@@ -96,6 +105,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 6,
     majorAppliances: ['Window AC x 2', 'Microwave', 'Chest Freezer'],
     isRegistered: false,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-7894',
   },
   {
     can: '1234567895',
@@ -108,6 +119,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 3,
     majorAppliances: ['Inverter AC (1.5 HP) x 1', 'Air Fryer', 'Laptop Setup'],
     isRegistered: false,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-7895',
   },
   {
     can: '9876543210',
@@ -120,6 +133,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 4,
     majorAppliances: ['Electric Fan x 4', 'Refrigerator', 'Rice Cooker'],
     isRegistered: false,
+    meterType: 'Analog',
+    meterSerialNumber: 'MR-ANA-3210',
   },
   {
     can: '1029384756',
@@ -132,6 +147,8 @@ export const DEFAULT_CUSTOMER_RECORDS: CustomerRecord[] = [
     householdMembers: 5,
     majorAppliances: ['Inverter Split AC x 3', 'Double Door Refrigerator', 'Washing Machine'],
     isRegistered: false,
+    meterType: 'AMI',
+    meterSerialNumber: 'MR-AMI-4756',
   },
 ];
 
@@ -187,6 +204,11 @@ export function createDemoUserProfile(customer: CustomerRecord): UserProfile {
     username = 'nenav';
   }
 
+  const meterType = customer.meterType || resolveMeterType(customer.can);
+  const meterSerialNumber =
+    customer.meterSerialNumber ||
+    (meterType === 'AMI' ? `MR-AMI-${customer.can.slice(-4)}` : `MR-ANA-${customer.can.slice(-4)}`);
+
   return {
     id: `demo-user-${customer.can}`,
     fullName: customer.accountHolderName,
@@ -200,6 +222,9 @@ export function createDemoUserProfile(customer: CustomerRecord): UserProfile {
     monthlyBudget: customer.monthlyBudget || 3500,
     createdAt: '2026-01-01T00:00:00.000Z',
     isEmailVerified: true,
+    meterType,
+    meterSerialNumber,
+    lastReadingDate: customer.lastReadingDate,
   };
 }
 
@@ -233,6 +258,8 @@ const DEFAULT_STORED_USERS: Array<{ user: UserProfile; passwordHash: string; sal
       monthlyBudget: 3500,
       createdAt: '2026-01-01T00:00:00.000Z',
       isEmailVerified: true,
+      meterType: 'AMI',
+      meterSerialNumber: 'MR-AMI-7890',
     },
     passwordHash: secureHash('P@ssword123', 'demo_salt_nena'),
     salt: 'demo_salt_nena',
@@ -250,6 +277,8 @@ const DEFAULT_STORED_USERS: Array<{ user: UserProfile; passwordHash: string; sal
       monthlyBudget: 5000,
       createdAt: '2026-01-01T00:00:00.000Z',
       isEmailVerified: true,
+      meterType: 'AMI',
+      meterSerialNumber: 'MR-AMI-4756',
     },
     passwordHash: secureHash('P@ssword123', 'demo_salt_maria'),
     salt: 'demo_salt_maria',
@@ -420,6 +449,9 @@ export async function verifyCANRecord(
               householdMembers: 5,
               majorAppliances: ['Inverter AC (1.5 HP) x 2'],
               isRegistered: false,
+              meterType: resolveMeterType(digits),
+              meterSerialNumber:
+                (resolveMeterType(digits) === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') + digits.slice(-4),
             }
           : undefined,
       };
@@ -501,6 +533,9 @@ export async function getLinkedCANForEmail(
             householdMembers: data.household_members || 5,
             majorAppliances: data.major_appliances || ['Inverter AC (1.5 HP) x 2'],
             isRegistered: false,
+            meterType: resolveMeterType(data.can),
+            meterSerialNumber:
+              (resolveMeterType(data.can) === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') + data.can.slice(-4),
           },
         };
       }
@@ -532,6 +567,9 @@ export async function getLinkedCANForEmail(
               householdMembers: data.household_members || 5,
               majorAppliances: data.major_appliances || ['Inverter AC (1.5 HP) x 2'],
               isRegistered: false,
+              meterType: resolveMeterType(data.can),
+              meterSerialNumber:
+                (resolveMeterType(data.can) === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') + data.can.slice(-4),
             },
           };
         }
@@ -628,6 +666,9 @@ export async function getLinkedCANForEmail(
     householdMembers: 5,
     majorAppliances: ['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
     isRegistered: false,
+    meterType: resolveMeterType(newCan),
+    meterSerialNumber:
+      (resolveMeterType(newCan) === 'AMI' ? 'MR-AMI-' : 'MR-ANA-') + newCan.slice(-4),
   };
 
   customers.push(newCustomer);
