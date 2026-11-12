@@ -179,6 +179,46 @@ async function getStoredCustomers(): Promise<CustomerRecord[]> {
   }
 }
 
+export function createDemoUserProfile(customer: CustomerRecord): UserProfile {
+  let username = customer.email
+    ? customer.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20)
+    : `user${customer.can.slice(-4)}`;
+  if (customer.can === '1234567890') {
+    username = 'nenav';
+  }
+
+  return {
+    id: `demo-user-${customer.can}`,
+    fullName: customer.accountHolderName,
+    username,
+    email: customer.email || `customer_${customer.can}@meralco.ph`,
+    can: customer.can,
+    sin: customer.sin || formatCANDisplay(customer.can),
+    serviceAddress: customer.serviceAddress,
+    householdMembers: customer.householdMembers || 5,
+    majorAppliances: customer.majorAppliances || ['Inverter AC (1.5 HP) x 2'],
+    monthlyBudget: customer.monthlyBudget || 3500,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    isEmailVerified: true,
+  };
+}
+
+export function findDemoCustomer(identifier: string): CustomerRecord | undefined {
+  const norm = identifier.trim().toLowerCase();
+  const digits = cleanCAN(identifier);
+
+  return DEFAULT_CUSTOMER_RECORDS.find((c) => {
+    if (digits.length === 10 && cleanCAN(c.can) === digits) return true;
+    if (c.email && c.email.toLowerCase() === norm) return true;
+    const emailPrefix = c.email?.split('@')[0].toLowerCase();
+    if (emailPrefix && emailPrefix === norm) return true;
+    if (c.can === '1234567890' && norm === 'nenav') return true;
+    const cleanHolderName = c.accountHolderName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanHolderName && cleanHolderName === norm.replace(/[^a-z0-9]/g, '')) return true;
+    return false;
+  });
+}
+
 const DEFAULT_STORED_USERS: Array<{ user: UserProfile; passwordHash: string; salt: string }> = [
   {
     user: {
@@ -841,10 +881,15 @@ export async function loginUser(
   const cleanDigits = cleanCAN(identifier);
   const lowerIdent = identifier.toLowerCase();
 
+  // Check if credentials match a pre-seeded Demo Meralco Customer
+  const isDemoPass = password === 'P@ssword123';
+  const demoCustomer = isDemoPass ? findDemoCustomer(identifier) : undefined;
+
   // 3. Live Supabase Login Flow
   if (isLiveSupabaseConfigured() && supabase) {
     try {
       let resolvedEmail = lowerIdent;
+      let rpcFailed = false;
 
       // If logging in with Username or CAN, resolve email via Postgres RPC
       if (identifierType === 'username' || identifierType === 'can') {
@@ -854,59 +899,79 @@ export async function loginUser(
         );
 
         if (resolveErr || !resolveData || !resolveData.found || !resolveData.email) {
-          await recordFailedAttempt(identifier);
-          return {
-            success: false,
-            error: 'Invalid credentials. Please check your identifier and password.',
-          };
+          rpcFailed = true;
+        } else {
+          resolvedEmail = resolveData.email;
         }
-        resolvedEmail = resolveData.email;
       }
 
-      // Supabase Auth SignInWithPassword
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: resolvedEmail,
-        password,
-      });
+      if (!rpcFailed) {
+        // Supabase Auth SignInWithPassword
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: resolvedEmail,
+          password,
+        });
 
-      if (authError || !authData.user?.email_confirmed_at) {
-        await recordFailedAttempt(identifier);
-        return {
-          success: false,
-          error: 'Invalid credentials. Please check your identifier and password.',
-        };
+        if (!authError && authData.user?.email_confirmed_at) {
+          // Fetch profile
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
+
+          const profile: UserProfile = {
+            isEmailVerified: true,
+            id: authData.user.id,
+            fullName: profileData?.full_name || authData.user.user_metadata?.full_name || 'Customer',
+            username: profileData?.username || authData.user.user_metadata?.username || 'user',
+            email: authData.user.email || resolvedEmail,
+            can: profileData?.can || authData.user.user_metadata?.can || '',
+            sin: formatCANDisplay(profileData?.can || authData.user.user_metadata?.can || ''),
+            householdMembers: profileData?.household_size || 5,
+            majorAppliances: ['Inverter AC (1.5 HP) x 2'],
+            monthlyBudget: profileData?.monthly_budget || 3500,
+            createdAt: profileData?.created_at || new Date().toISOString(),
+          };
+
+          await clearRateLimit(identifier);
+          await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(profile));
+          return { success: true, data: profile };
+        }
       }
 
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
+      // If live Supabase authentication did not succeed, allow pre-seeded Demo accounts to log in
+      if (demoCustomer) {
+        const demoProfile = createDemoUserProfile(demoCustomer);
+        await clearRateLimit(identifier);
+        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(demoProfile));
+        return { success: true, data: demoProfile };
+      }
 
-      const profile: UserProfile = {
-        isEmailVerified: true,
-        id: authData.user.id,
-        fullName: profileData?.full_name || authData.user.user_metadata?.full_name || 'Customer',
-        username: profileData?.username || authData.user.user_metadata?.username || 'user',
-        email: authData.user.email || resolvedEmail,
-        can: profileData?.can || authData.user.user_metadata?.can || '',
-        sin: formatCANDisplay(profileData?.can || authData.user.user_metadata?.can || ''),
-        householdMembers: profileData?.household_size || 5,
-        majorAppliances: ['Inverter AC (1.5 HP) x 2'],
-        monthlyBudget: profileData?.monthly_budget || 3500,
-        createdAt: profileData?.created_at || new Date().toISOString(),
+      await recordFailedAttempt(identifier);
+      return {
+        success: false,
+        error: 'Invalid credentials. Please check your identifier and password.',
       };
-
-      await clearRateLimit(identifier);
-      await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(profile));
-      return { success: true, data: profile };
     } catch (e) {
+      if (demoCustomer) {
+        const demoProfile = createDemoUserProfile(demoCustomer);
+        await clearRateLimit(identifier);
+        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(demoProfile));
+        return { success: true, data: demoProfile };
+      }
       return { success: false, error: 'Unable to log in. Please try again.' };
     }
   }
 
   // 4. Local Engine Multi-Identifier Resolution & Verification
+  if (demoCustomer) {
+    const demoProfile = createDemoUserProfile(demoCustomer);
+    await clearRateLimit(identifier);
+    await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(demoProfile));
+    return { success: true, data: demoProfile };
+  }
+
   const users = await getStoredUsers();
 
   // Find user by Email, Username, or CAN

@@ -2,10 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
 import { EmailDeliveryModal } from '../components/EmailDeliveryModal';
+import { SeedAccountsModal } from '../components/SeedAccountsModal';
 import { isLiveSupabaseConfigured } from '../config/supabase';
 import { useAuth } from '../context/AuthContext';
 import { confirmRegistrationOTP, getPendingEmailVerification, resendRegistrationOTP } from '../services/authService';
-import { RegistrationFormData, UserProfile } from '../types/auth';
+import { CustomerRecord, RegistrationFormData, UserProfile } from '../types/auth';
 import { evaluatePassword, formatCANDisplay, validateConfirmPassword, validateEmail, validateFullName, validatePassword, validateUsername } from '../utils/validation';
 
 function Field({ label, error, ...props }: TextInputProps & { label: string; error?: string }) {
@@ -29,6 +30,7 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
   const [verificationOpen, setVerificationOpen] = useState(false);
+  const [seedModalVisible, setSeedModalVisible] = useState(false);
   const [code, setCode] = useState('');
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -59,6 +61,22 @@ export default function RegisterScreen() {
   const change = (key: keyof RegistrationFormData, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setErrors(prev => ({ ...prev, [key]: '' }));
+    setError('');
+  };
+
+  const handleSelectSeedAccount = (customer: CustomerRecord) => {
+    const uname = (customer.email?.split('@')[0] || customer.accountHolderName)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .slice(0, 20);
+    setForm({
+      fullName: customer.accountHolderName,
+      username: uname,
+      email: customer.email || '',
+      password: 'P@ssword123',
+      confirmPassword: 'P@ssword123',
+    });
+    setErrors({});
     setError('');
   };
   const submit = async () => {
@@ -166,6 +184,16 @@ export default function RegisterScreen() {
               </View>
               <Field label="Confirm password" placeholder="Re-enter your password" value={form.confirmPassword} onChangeText={value => change('confirmPassword', value)} error={errors.confirmPassword} secureTextEntry={!showPassword} autoComplete="new-password" autoCapitalize="none" editable={!busy} onSubmitEditing={submit} />
               <Text style={styles.helper}>Your Meralco CAN will be automatically linked to your email.</Text>
+              
+              {/* Demo Meralco Accounts Quick Picker */}
+              <TouchableOpacity
+                style={styles.demoAccountsBtn}
+                onPress={() => setSeedModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.demoAccountsBtnText}>⚡ Demo Meralco Accounts (Quick Fill)</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity accessibilityRole="button" style={[styles.button, (busy || !configured) && styles.disabled]} disabled={busy || !configured} onPress={submit}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{configured ? 'Send verification code' : 'Email delivery unavailable'}</Text>}
               </TouchableOpacity>
@@ -175,6 +203,7 @@ export default function RegisterScreen() {
           <TouchableOpacity accessibilityRole="button" style={styles.footer} disabled={busy} onPress={() => router.replace('/login')}><Text style={styles.secondaryLink}>Log in</Text></TouchableOpacity>
         </View>
         <EmailDeliveryModal visible={showCAN} user={registeredUser} onProceed={() => { setShowCAN(false); router.replace('/(tabs)'); }} />
+        <SeedAccountsModal visible={seedModalVisible} onClose={() => setSeedModalVisible(false)} onSelectAccount={handleSelectSeedAccount} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -225,4 +254,20 @@ const styles = StyleSheet.create({
   secondaryLink: { color: '#475569', fontSize: 13 },
   muted: { color: '#64748b' },
   footer: { alignItems: 'center', marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  demoAccountsBtn: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  demoAccountsBtnText: {
+    color: '#D95200',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
 });

@@ -89,6 +89,30 @@ describe('Security & Auth Integration Tests', () => {
       expect(res.success).toBe(true);
       expect(res.data?.fullName).toBe('Nena Villanueva');
     });
+
+    it('logs in successfully with any pre-seeded demo account from DEFAULT_CUSTOMER_RECORDS (Quick Fill)', async () => {
+      // Test Jaeda Marthena Iral via CAN
+      const resJaeda = await loginUser('1234567891', 'P@ssword123');
+      expect(resJaeda.success).toBe(true);
+      expect(resJaeda.data?.fullName).toBe('Jaeda Marthena Iral');
+      expect(resJaeda.data?.can).toBe('1234567891');
+
+      // Test Carl Benedict Enriquez via Email
+      const resCarl = await loginUser('carl.enriquez@teamohmygrid.ph', 'P@ssword123');
+      expect(resCarl.success).toBe(true);
+      expect(resCarl.data?.fullName).toBe('Carl Benedict Enriquez');
+      expect(resCarl.data?.monthlyBudget).toBe(3800);
+
+      // Test Hector Escobido via CAN
+      const resHector = await loginUser('1234-5678-94', 'P@ssword123');
+      expect(resHector.success).toBe(true);
+      expect(resHector.data?.fullName).toBe('Hector Escobido');
+
+      // Test Maria Santos via CAN
+      const resMaria = await loginUser('1029384756', 'P@ssword123');
+      expect(resMaria.success).toBe(true);
+      expect(resMaria.data?.fullName).toBe('Maria Santos');
+    });
   });
 
   describe('4. Account Enumeration Defense', () => {

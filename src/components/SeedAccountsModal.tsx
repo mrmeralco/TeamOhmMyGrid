@@ -34,7 +34,7 @@ export const SeedAccountsModal: React.FC<SeedAccountsModalProps> = ({
             <View>
               <Text style={styles.title}>Demo Meralco Accounts</Text>
               <Text style={styles.subtitle}>
-                Tap any pre-seeded record to auto-fill the CAN field for testing
+                Tap any pre-seeded record to auto-fill for testing. Password: P@ssword123
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
