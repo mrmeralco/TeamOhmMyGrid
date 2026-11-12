@@ -492,38 +492,52 @@ export async function registerUser(
     customerInfo = canCheck.customer;
   } else {
     // Automatically allocate official Meralco CAN for the user
-    const customers = await getStoredCustomers();
-    const users = await getStoredUsers();
+    // If live Supabase is configured, dynamically query for an unregistered valid CAN
+    if (isLiveSupabaseConfigured() && supabase) {
+      for (const rec of DEFAULT_CUSTOMER_RECORDS) {
+        const canCheck = await verifyCANRecord(rec.can, formData.fullName);
+        if (canCheck.valid) {
+          cleanDigits = rec.can;
+          customerInfo = canCheck.customer || rec;
+          break;
+        }
+      }
+    }
 
-    // Check if name matches an existing Meralco account first
-    const trimmedNameLower = formData.fullName.trim().toLowerCase();
-    const matchedByName = customers.find(
-      (c) => !c.isRegistered && !users.some((u) => u.user.can === c.can) &&
-             c.accountHolderName.toLowerCase() === trimmedNameLower
-    );
+    if (!cleanDigits) {
+      const customers = await getStoredCustomers();
+      const users = await getStoredUsers();
 
-    const available = matchedByName || customers.find(
-      (c) => !c.isRegistered && !users.some((u) => u.user.can === c.can)
-    );
+      // Check if name matches an existing Meralco account first
+      const trimmedNameLower = formData.fullName.trim().toLowerCase();
+      const matchedByName = customers.find(
+        (c) => !c.isRegistered && !users.some((u) => u.user.can === c.can) &&
+               c.accountHolderName.toLowerCase() === trimmedNameLower
+      );
 
-    if (available) {
-      cleanDigits = available.can;
-      customerInfo = available;
-    } else {
-      // Auto-generate 10-digit CAN in official Meralco customer range
-      const newCan = '10' + Math.floor(10000000 + Math.random() * 90000000).toString().slice(0, 8);
-      cleanDigits = newCan;
-      customerInfo = {
-        can: newCan,
-        sin: formatCANDisplay(newCan),
-        accountHolderName: formData.fullName.trim(),
-        serviceAddress: 'Meralco Service Franchise, Metro Manila',
-        rateClass: 'Residential',
-        monthlyBudget: 3500,
-        householdMembers: 5,
-        majorAppliances: ['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
-        isRegistered: false,
-      };
+      const available = matchedByName || customers.find(
+        (c) => !c.isRegistered && !users.some((u) => u.user.can === c.can)
+      );
+
+      if (available) {
+        cleanDigits = available.can;
+        customerInfo = available;
+      } else {
+        // Auto-generate 10-digit CAN in official Meralco customer range
+        const newCan = '10' + Math.floor(10000000 + Math.random() * 90000000).toString().slice(0, 8);
+        cleanDigits = newCan;
+        customerInfo = {
+          can: newCan,
+          sin: formatCANDisplay(newCan),
+          accountHolderName: formData.fullName.trim(),
+          serviceAddress: 'Meralco Service Franchise, Metro Manila',
+          rateClass: 'Residential',
+          monthlyBudget: 3500,
+          householdMembers: 5,
+          majorAppliances: ['Inverter AC (1.5 HP) x 2', 'Refrigerator', 'Washing Machine'],
+          isRegistered: false,
+        };
+      }
     }
   }
 
