@@ -414,6 +414,9 @@ export default function TanongScreen() {
   const [pourSpeechText, setPourSpeechText] = useState('');
   const [latestVoiceIndex, setLatestVoiceIndex] = useState<number | null>(null);
 
+  const capturedAudioRef = useRef<string | null>(null);
+  const handlePressOutRef = useRef<() => void>(() => {});
+
   const handleBubbleLayout = useCallback((layout: { width: number; height: number; y: number }) => {
     if (layout.width > 0 && layout.height > 0) {
       setPourTargetWidth(layout.width);
@@ -507,10 +510,13 @@ export default function TanongScreen() {
     startStreamingTranscript();
 
     // Start audio recorder
+    capturedAudioRef.current = null;
     startRecording((base64Audio) => {
       if (base64Audio) {
-        // captured audio handled in handlePressOut
+        capturedAudioRef.current = base64Audio;
       }
+      // When 3-second recording duration auto-expires, trigger seamless finish if still recording
+      handlePressOutRef.current?.();
     });
   }, [loading, startRecording]);
 
@@ -539,7 +545,8 @@ export default function TanongScreen() {
     setMicPhase('pouring');
     setPourActive(true);
 
-    const capturedAudioBase64 = await stopRecording();
+    const capturedAudioBase64 = capturedAudioRef.current || (await stopRecording());
+    capturedAudioRef.current = null;
 
     // Commit user message to chat history
     addChatMessage('user', finalSpeechText);
@@ -599,6 +606,10 @@ export default function TanongScreen() {
     budget,
     projected,
   ]);
+
+  useEffect(() => {
+    handlePressOutRef.current = handlePressOut;
+  }, [handlePressOut]);
 
   const handlePourDone = useCallback(() => {
     setPourActive(false);
